@@ -1,10 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/lib/auth/server";
+import { getAuth } from "@/lib/auth/server";
 
-const authMiddleware = auth.middleware({
-  loginUrl: "/auth/sign-in",
-  publicRoutes: ["/api/public", "/manifest.webmanifest"],
-});
+let _authMiddleware: ReturnType<ReturnType<typeof getAuth>["middleware"]> | null =
+  null;
+
+function getAuthMiddleware() {
+  if (!_authMiddleware) {
+    _authMiddleware = getAuth().middleware({
+      loginUrl: "/auth/sign-in",
+      publicRoutes: ["/api/public", "/manifest.webmanifest"],
+    });
+  }
+  return _authMiddleware;
+}
 
 export default function proxy(req: NextRequest) {
   if (
@@ -13,9 +21,10 @@ export default function proxy(req: NextRequest) {
   ) {
     return NextResponse.next();
   }
-  return authMiddleware(req);
+  return getAuthMiddleware()(req);
 }
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|icons/).*)"],
 };
+

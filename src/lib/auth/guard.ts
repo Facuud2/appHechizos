@@ -1,6 +1,6 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { auth } from "./server";
+import { getAuth } from "./server";
 
 export interface AuthGuardSuccess {
   ok: true;
@@ -26,7 +26,7 @@ export async function requireOwnerSession(): Promise<
   }
 
   try {
-    const { data: session } = await auth.getSession();
+    const { data: session } = await getAuth().getSession();
     const user = session?.user;
 
     if (!user?.email) {
