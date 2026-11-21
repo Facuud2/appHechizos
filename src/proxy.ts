@@ -8,7 +8,16 @@ function getAuthMiddleware() {
   if (!_authMiddleware) {
     _authMiddleware = getAuth().middleware({
       loginUrl: "/auth/sign-in",
-      publicRoutes: ["/api/public", "/manifest.webmanifest"],
+      publicRoutes: [
+        "/api/public",
+        "/manifest.webmanifest",
+        "/sw.js",
+        "/icon.svg",
+        "/icon-192.png",
+        "/icon-512.png",
+        "/icon-maskable-512.png",
+        "/apple-touch-icon.png",
+      ],
     });
   }
   return _authMiddleware;
@@ -25,6 +34,8 @@ export default function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons/).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|icon.*\\.png|icon\\.svg|apple-touch-icon\\.png).*)",
+  ],
 };
 

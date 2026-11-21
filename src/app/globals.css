@@ -66,9 +66,23 @@
   --bg-chrome-solid: #f6f7fb;
   --bg-scrim: rgba(15, 23, 42, 0.42);
 
-  --line-subtle: var(--slate-200);
-  --line-strong: var(--slate-300);
+  /* Alpha hairline borders (blend cleanly over any surface, never heavy solid hex) */
+  --line-subtle: rgba(15, 23, 42, 0.085);
+  --line-strong: rgba(15, 23, 42, 0.16);
   --line-specular: rgba(255, 255, 255, 0.85);
+
+  /* iOS Mobile Design Tokens & Safe Area Helpers */
+  --gutter-x: 16px;
+  --card-pad: 14px;
+  --stack-gap: 10px;
+  --section-gap: 20px;
+  --radius-sheet: 24px;
+  --radius-card: 16px;
+  --radius-card-inner: 10px;
+  --radius-control: 12px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tabbar-height: 54px;
 
   --fg-primary: #0f172a;
   --fg-secondary: var(--slate-600);
@@ -94,13 +108,20 @@
   --info-text: var(--cobalt-700);
   --info-soft: var(--cobalt-50);
 
-  /* ── Motion Tokens (Apple Fluid Timing) ── */
+  /* ── Motion Tokens (Apple Fluid Timing & Emil Kowalski Curves) ── */
   --dur-press: 100ms;
   --dur-fast: 160ms;
-  --dur-base: 240ms;
-  --dur-spring: 360ms;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-base: 220ms;
+  --dur-spring: 340ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── Skeleton Shimmer Tokens (Light Mode) ── */
+  --skeleton-base: rgba(15, 23, 42, 0.055);
+  --skeleton-highlight: rgba(255, 255, 255, 0.72);
+  --skeleton-accent: rgba(200, 30, 104, 0.06);
 
   color-scheme: light;
 }
@@ -115,8 +136,9 @@
   --bg-chrome-solid: #111520;
   --bg-scrim: rgba(4, 6, 12, 0.74);
 
-  --line-subtle: #262d40;
-  --line-strong: #3b4560;
+  /* Alpha hairline borders in Dark Mode (depth via luminance + alpha) */
+  --line-subtle: rgba(248, 250, 252, 0.095);
+  --line-strong: rgba(248, 250, 252, 0.18);
   --line-specular: rgba(248, 250, 252, 0.08);
 
   --fg-primary: #f8fafc;
@@ -143,20 +165,34 @@
   --info-text: var(--cobalt-400);
   --info-soft: var(--cobalt-950);
 
+  /* ── Skeleton Shimmer Tokens (Dark Mode) ── */
+  --skeleton-base: rgba(248, 250, 252, 0.06);
+  --skeleton-highlight: rgba(248, 250, 252, 0.14);
+  --skeleton-accent: rgba(255, 92, 161, 0.08);
+
   color-scheme: dark;
 }
 
 /* Increased Contrast Preferences — separate per appearance */
 @media (prefers-contrast: more) {
   :root {
-    --line-subtle: #94a3b8;
-    --line-strong: #475569;
+    --line-subtle: rgba(15, 23, 42, 0.35);
+    --line-strong: rgba(15, 23, 42, 0.6);
     --bg-chrome: #f6f7fb;
   }
   .dark {
-    --line-subtle: #475569;
-    --line-strong: #94a3b8;
+    --line-subtle: rgba(248, 250, 252, 0.4);
+    --line-strong: rgba(248, 250, 252, 0.7);
     --bg-chrome: #111520;
+  }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter-x: 24px;
+    --card-pad: 20px;
+    --stack-gap: 14px;
+    --section-gap: 28px;
   }
 }
 
@@ -242,8 +278,8 @@ a,
   -webkit-touch-callout: none;
 }
 
-/* Focus-visible ring for keyboard accessibility */
-:focus-visible {
+/* Focus-visible ring for keyboard accessibility (skip text inputs which highlight their border) */
+:focus-visible:not(input):not(textarea):not(select) {
   outline: 2px solid var(--accent-solid);
   outline-offset: 2px;
 }
@@ -309,15 +345,82 @@ a,
   }
 }
 
-/* ── Sheet & Variation Transitions ── */
+/* ── GPU-Composited iOS Skeleton Shimmer (Zero Layout/Paint Cost) ── */
+@keyframes iosShimmerSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--skeleton-base);
+}
+
+.skeleton-shimmer-accent {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--skeleton-accent);
+}
+
+.skeleton-shimmer::after,
+.skeleton-shimmer-accent::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--skeleton-highlight) 50%,
+    transparent 100%
+  );
+  animation: iosShimmerSweep 1.35s var(--ease-in-out) infinite;
+  will-change: transform;
+}
+
+/* ── Sheet, Scrim & List Transitions ── */
 @keyframes sheetEnter {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.985);
+    transform: translateY(28px) scale(0.985);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sheetExit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(36px) scale(0.985);
+  }
+}
+
+@keyframes scrimEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scrimExit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 
@@ -332,15 +435,98 @@ a,
   }
 }
 
+@keyframes staggerReveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes checkPop {
+  0% {
+    transform: scale(0.88);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes pillMorphEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Damped horizontal error shake (±6px, 240ms) for validation / error states */
+@keyframes iosErrorShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  45% {
+    transform: translateX(5px);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+  85% {
+    transform: translateX(2px);
+  }
+}
+
 .animate-sheet-enter {
-  animation: sheetEnter var(--dur-spring) var(--ease-spring) both;
+  animation: sheetEnter var(--dur-spring) var(--ease-drawer) both;
+}
+
+.animate-sheet-exit {
+  animation: sheetExit 210ms var(--ease-out) both;
+}
+
+.animate-scrim-enter {
+  animation: scrimEnter 220ms var(--ease-out) both;
+}
+
+.animate-scrim-exit {
+  animation: scrimExit 200ms var(--ease-out) both;
 }
 
 .animate-variation-enter {
   animation: variationFadeIn var(--dur-base) var(--ease-out) both;
 }
 
-/* ── Reduced Motion ── */
+.animate-stagger-item {
+  animation: staggerReveal 220ms var(--ease-out) both;
+  animation-delay: calc(min(var(--stagger-idx, 0), 5) * 35ms);
+}
+
+.animate-check-pop {
+  animation: checkPop 180ms var(--ease-out) both;
+}
+
+.animate-pill-enter {
+  animation: pillMorphEnter 220ms var(--ease-drawer) both;
+}
+
+.animate-error-shake {
+  animation: iosErrorShake 240ms var(--ease-out) both;
+}
+
+/* ── Reduced Motion (Gentler opacity fallback, zero transform motion) ── */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -352,8 +538,21 @@ a,
     transform: none;
   }
 
+  .skeleton-shimmer::after,
+  .skeleton-shimmer-accent::after {
+    animation: none;
+    display: none;
+  }
+
   .animate-sheet-enter,
-  .animate-variation-enter {
+  .animate-sheet-exit,
+  .animate-scrim-enter,
+  .animate-scrim-exit,
+  .animate-variation-enter,
+  .animate-stagger-item,
+  .animate-check-pop,
+  .animate-pill-enter,
+  .animate-error-shake {
     animation: none;
   }
 }
@@ -371,6 +570,59 @@ a,
   scrollbar-width: none;
 }
 
+/* iOS Horizontal Carousel with Native Snap & Clean Edge Fade */
+.ios-carousel {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+}
+.ios-carousel::-webkit-scrollbar {
+  display: none;
+}
+.ios-carousel > * {
+  scroll-snap-align: start;
+  flex-shrink: 0;
+}
+
+/* Invisible 44x44px minimum touch target for visually compact controls */
+.hit-44 {
+  position: relative;
+}
+.hit-44::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+}
+
+/* Bottom Sheet Grab Handle */
+.ios-grab-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 9999px;
+  background-color: var(--line-strong);
+  margin-inline: auto;
+}
+
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -381,4 +633,13 @@ a,
 
 .pb-sheet-safe {
   padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+.ios-scroll-content {
+  padding-bottom: calc(var(--tabbar-height, 54px) + env(safe-area-inset-bottom, 0px) + 20px);
+}
+@media (min-width: 768px) {
+  .ios-scroll-content {
+    padding-bottom: 2.5rem;
+  }
 }

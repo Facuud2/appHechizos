@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   Ban,
@@ -10,12 +10,18 @@ import {
   Loader2,
   Minus,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { QuickIngredientModal } from "@/components/QuickIngredientModal";
+import {
+  ProgressiveImage,
+  StockAlacenaSkeleton,
+} from "@/components/Skeletons";
 import {
   useDeleteIngredient,
   useGrimorio,
@@ -164,7 +170,7 @@ function CostInlineEditor({
     return (
       <span
         ref={containerRef}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-canvas p-1"
+        className="animate-variation-enter inline-flex items-center gap-1.5 rounded-lg border border-accent bg-canvas p-1"
       >
         <input
           type="number"
@@ -201,7 +207,7 @@ function CostInlineEditor({
         );
         setEditing(true);
       }}
-      className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 tabular-nums text-xs font-medium text-ink-muted hover:bg-surface-elevated hover:text-accent-text"
+      className="apple-press inline-flex items-center gap-1 rounded-lg px-1.5 py-1 tabular-nums text-xs font-medium text-ink-muted hover:bg-surface-elevated hover:text-accent-text"
     >
       <DollarSign className="h-3.5 w-3.5" aria-hidden="true" />
       {ingredient.unitCostArs !== null
@@ -256,6 +262,9 @@ export default function StockAlacenaPage() {
       return true;
     });
   }, [data?.ingredients, search, groupFilter, onlyOut]);
+
+  const isFiltering =
+    search.trim().length > 0 || groupFilter !== "all" || onlyOut;
 
   function stepQty(ing: IngredientItem, delta: number) {
     const step = ing.unitType === "g" || ing.unitType === "ml" ? 10 : 1;
@@ -320,12 +329,12 @@ export default function StockAlacenaPage() {
 
   return (
     <AppShell>
-      <header className="mb-5 flex items-start justify-between gap-3">
+      <header className="mb-4 flex items-start justify-between gap-2.5">
         <div>
-          <h1 className="display-heading text-3xl font-semibold text-ink sm:text-4xl">
+          <h1 className="display-heading text-[28px] font-bold tracking-[-0.02em] text-ink sm:text-4xl">
             Alacena &amp; Stock
           </h1>
-          <p className="mt-1 text-sm text-ink-muted">
+          <p className="mt-0.5 text-[13px] text-ink-muted sm:text-sm">
             Tocá el número para cargar la cantidad exacta o marcá sin stock
           </p>
         </div>
@@ -333,7 +342,7 @@ export default function StockAlacenaPage() {
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="apple-press inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover"
+          className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent hover:bg-accent-hover sm:min-h-11 sm:px-4 sm:text-sm"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           <span>Nuevo</span>
@@ -341,7 +350,7 @@ export default function StockAlacenaPage() {
       </header>
 
       {/* Search & Out-of-stock filter */}
-      <div className="mb-3 flex gap-2">
+      <div className="mb-2.5 flex gap-2">
         <div className="relative flex-1">
           <Search
             className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-dim"
@@ -353,15 +362,25 @@ export default function StockAlacenaPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar ingrediente..."
-            className="w-full rounded-2xl border border-border-subtle bg-surface py-3 pl-10 pr-4 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
+            className="w-full rounded-[14px] border border-border-subtle bg-surface py-2.5 pl-10 pr-9 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Limpiar búsqueda"
+              className="apple-press hit-44 absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-ink-dim hover:bg-surface-elevated hover:text-ink"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         <button
           type="button"
           aria-pressed={onlyOut}
           onClick={() => setOnlyOut((v) => !v)}
-          className={`apple-press min-h-11 shrink-0 rounded-2xl border px-3.5 text-xs font-semibold ${
+          className={`apple-press hit-44 min-h-10 shrink-0 rounded-[14px] border px-3 text-xs font-semibold sm:min-h-11 sm:px-3.5 ${
             onlyOut
               ? "border-danger bg-danger-soft text-danger"
               : "border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink"
@@ -371,14 +390,14 @@ export default function StockAlacenaPage() {
         </button>
       </div>
 
-      {/* Group chips */}
-      <div className="no-scrollbar scroll-contain mb-6 flex gap-1.5 overflow-x-auto pb-1">
+      {/* Group chips (Horizontal Carousel with Edge Fade) */}
+      <div className="ios-carousel scroll-contain mb-5 pb-1">
         <button
           type="button"
           onClick={() => setGroupFilter("all")}
-          className={`apple-press min-h-9 shrink-0 rounded-full border px-3.5 py-1 text-xs font-medium ${
+          className={`apple-press hit-44 min-h-9 shrink-0 rounded-full border px-3.5 py-1 text-xs font-medium ${
             groupFilter === "all"
-              ? "border-accent bg-accent-soft text-accent-text font-semibold"
+              ? "border-accent bg-accent-soft font-semibold text-accent-text"
               : "border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink"
           }`}
         >
@@ -387,39 +406,69 @@ export default function StockAlacenaPage() {
             ({data?.ingredients.length ?? 0})
           </span>
         </button>
-        {groups.map((g) => (
-          <button
-            key={g}
-            type="button"
-            onClick={() => setGroupFilter(g)}
-            className={`apple-press min-h-9 shrink-0 rounded-full border px-3.5 py-1 text-xs font-medium ${
-              groupFilter === g
-                ? "border-accent bg-accent-soft text-accent-text font-semibold"
-                : "border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink"
-            }`}
-          >
-            {g}
-          </button>
-        ))}
+        {isLoading && !data
+          ? [78, 86, 72, 90, 82].map((w, idx) => (
+              <div
+                key={idx}
+                style={{ width: `${w}px` }}
+                className="skeleton-shimmer h-9 shrink-0 rounded-full border border-border-subtle"
+              />
+            ))
+          : groups.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setGroupFilter(g)}
+                className={`apple-press hit-44 min-h-9 shrink-0 rounded-full border px-3.5 py-1 text-xs font-medium ${
+                  groupFilter === g
+                    ? "border-accent bg-accent-soft font-semibold text-accent-text"
+                    : "border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
       </div>
 
       {/* Ingredient List */}
       {isLoading && !data ? (
-        <div className="space-y-3.5">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-28 animate-pulse rounded-2xl border border-border-subtle bg-surface"
-            />
-          ))}
-        </div>
+        <StockAlacenaSkeleton />
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl border border-border-subtle bg-surface p-8 text-center text-sm text-ink-muted">
-          No hay ingredientes que coincidan con ese filtro.
+        <div className="animate-variation-enter rounded-[16px] border border-border-subtle bg-surface p-5 text-center sm:p-8">
+          <p className="section-heading text-[18px] font-semibold text-ink sm:text-xl">
+            No hay ingredientes que coincidan con ese filtro
+          </p>
+          <p className="mt-1 text-[13px] text-ink-muted sm:text-sm">
+            Probá quitar el filtro o sumar el ingrediente a tu alacena ahora.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {isFiltering && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setGroupFilter("all");
+                  setOnlyOut(false);
+                }}
+                className="apple-press inline-flex min-h-10 items-center gap-1.5 rounded-[12px] border border-border-subtle bg-canvas px-3.5 py-2 text-xs font-semibold text-ink hover:border-border-strong"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Limpiar filtros</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="apple-press inline-flex min-h-10 items-center gap-1.5 rounded-[12px] bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Nuevo ingrediente</span>
+            </button>
+          </div>
         </div>
       ) : (
-        <div className="flex w-full min-w-0 flex-col gap-3.5 lg:grid lg:grid-cols-2">
-          {filtered.map((ing) => {
+        <div className="flex w-full min-w-0 flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-3.5">
+          {filtered.map((ing, idx) => {
             const usedIn = spellsByIngredient.get(ing.id) ?? [];
             const isExpanded = expandedId === ing.id;
             const isOut = ing.stockLevel === "out";
@@ -428,14 +477,21 @@ export default function StockAlacenaPage() {
             return (
               <div
                 key={ing.id}
-                className={`flex w-full min-w-0 flex-col justify-between overflow-hidden rounded-2xl border bg-surface p-4 transition ${
+                style={
+                  !isFiltering
+                    ? ({ "--stagger-idx": idx } as CSSProperties)
+                    : undefined
+                }
+                className={`${
+                  !isFiltering ? "animate-stagger-item" : ""
+                } flex w-full min-w-0 flex-col justify-between overflow-hidden rounded-[16px] border bg-surface p-3.5 transition sm:p-4 ${
                   isOut
                     ? "border-danger/35 bg-surface/90"
                     : "border-border-subtle hover:border-border-strong"
                 }`}
               >
-                {/* Top Row: Thumbnail + Info + Delete */}
-                <div className="flex items-start gap-3.5">
+                {/* Top Row: Thumbnail (Concentric r=10px inside r=16px) + Info + Delete */}
+                <div className="flex items-start gap-3">
                   {/* Cover Photo Thumbnail (1-tap upload/change) */}
                   <label
                     title={
@@ -443,7 +499,7 @@ export default function StockAlacenaPage() {
                         ? "Cambiar foto del ingrediente"
                         : "Cargar foto del ingrediente"
                     }
-                    className="apple-press group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-border-subtle bg-canvas"
+                    className="apple-press group relative flex h-15 w-15 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-[10px] border border-border-subtle bg-canvas sm:h-16 sm:w-16"
                   >
                     {isUploading ? (
                       <Loader2
@@ -452,7 +508,7 @@ export default function StockAlacenaPage() {
                       />
                     ) : ing.imageUrl ? (
                       <>
-                        <img
+                        <ProgressiveImage
                           src={ing.imageUrl}
                           alt={ing.name}
                           className="h-full w-full object-cover"
@@ -509,7 +565,7 @@ export default function StockAlacenaPage() {
                           }
                         }}
                         aria-label={`Eliminar ${ing.name}`}
-                        className="apple-press flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-dim hover:bg-danger-soft hover:text-danger"
+                        className="apple-press hit-44 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-ink-dim hover:bg-danger-soft hover:text-danger"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -518,10 +574,15 @@ export default function StockAlacenaPage() {
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                       <button
                         type="button"
+                        aria-expanded={isExpanded}
                         onClick={() =>
                           setExpandedId(isExpanded ? null : ing.id)
                         }
-                        className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-medium hover:bg-surface-elevated hover:text-accent-text"
+                        className={`apple-press inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-medium ${
+                          isExpanded
+                            ? "bg-accent-soft text-accent-text"
+                            : "hover:bg-surface-elevated hover:text-accent-text"
+                        }`}
                       >
                         <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
                         <span className="tabular-nums">
@@ -575,7 +636,7 @@ export default function StockAlacenaPage() {
 
                 {/* Reverse lookup: spells using this ingredient */}
                 {isExpanded && (
-                  <div className="mt-3 border-t border-border-subtle pt-3">
+                  <div className="animate-variation-enter mt-3 border-t border-border-subtle pt-3">
                     {usedIn.length === 0 ? (
                       <p className="text-xs text-ink-dim">
                         Todavía no está asignado a ningún hechizo.

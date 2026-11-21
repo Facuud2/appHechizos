@@ -1,11 +1,13 @@
-const CACHE_NAME = "altar-hechizos-shell-v3";
+const CACHE_NAME = "altar-hechizos-shell-v4";
 const SHELL_ASSETS = [
   "/",
   "/explorar",
   "/stock",
+  "/manifest.webmanifest",
   "/icon.svg",
   "/icon-192.png",
   "/icon-512.png",
+  "/icon-maskable-512.png",
   "/apple-touch-icon.png",
 ];
 
@@ -50,7 +52,8 @@ self.addEventListener("fetch", (event) => {
     request.mode === "navigate" ||
     url.pathname.startsWith("/_next/static/") ||
     url.pathname.startsWith("/icon") ||
-    url.pathname === "/apple-touch-icon.png"
+    url.pathname === "/apple-touch-icon.png" ||
+    url.pathname === "/manifest.webmanifest"
   ) {
     event.respondWith(
       fetch(request)

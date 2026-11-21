@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useInvalidateGrimorio } from "@/hooks/useGrimorioData";
+import { IosBottomSheet } from "./IosBottomSheet";
 import type { CategoryItem, SpellItem } from "@/types/app";
 
 interface TierDraft {
@@ -59,6 +60,7 @@ export function SpellFormModal({
   const invalidate = useInvalidateGrimorio();
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0);
+  const [shakeTick, setShakeTick] = useState(0);
 
   const [title, setTitle] = useState(editingSpell?.title ?? "");
   const [categoryId, setCategoryId] = useState(
@@ -130,8 +132,6 @@ export function SpellFormModal({
     );
   }, [open, editingSpell, categories]);
 
-  if (!open) return null;
-
   // All available energy pills = defaults + any custom ones already added
   const allEnergyOptions = Array.from(
     new Set([...DEFAULT_ENERGIES, ...selectedEnergies])
@@ -190,6 +190,7 @@ export function SpellFormModal({
 
   function goNext() {
     if (step === 0 && !title.trim()) {
+      setShakeTick((t) => t + 1);
       toast.error("Escribí el nombre del hechizo antes de avanzar.");
       return;
     }
@@ -199,6 +200,7 @@ export function SpellFormModal({
   async function saveSpell() {
     if (!title.trim()) {
       setStep(0);
+      setShakeTick((t) => t + 1);
       toast.error("El nombre del hechizo es obligatorio.");
       return;
     }
@@ -247,6 +249,7 @@ export function SpellFormModal({
       onSaved?.(data.id ?? editingSpell?.id ?? "");
       onClose();
     } catch (err) {
+      setShakeTick((t) => t + 1);
       toast.error(err instanceof Error ? err.message : "Error inesperado");
     } finally {
       setSaving(false);
@@ -256,23 +259,19 @@ export function SpellFormModal({
   const totalSteps = WIZARD_STEPS.length;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="spell-form-title"
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-[var(--bg-scrim)] p-0 sm:items-center sm:p-4"
-      onClick={onClose}
+    <IosBottomSheet
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="spell-form-title"
+      maxWidthClass="max-w-lg"
+      shakeTick={shakeTick}
     >
-      <div
-        className="animate-sheet-enter scroll-contain flex max-h-[88dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border-subtle bg-surface sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Top Header + Arrow Stepper */}
-        <div className="border-b border-border-subtle px-5 pt-4 pb-3.5">
+      {/* Top Header + Arrow Stepper */}
+      <div className="border-b border-border-subtle px-4 pt-1.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
           <div className="flex items-center justify-between gap-2">
             <h2
               id="spell-form-title"
-              className="section-heading text-xl font-semibold text-ink"
+              className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
             >
               {editingSpell ? "Editar hechizo" : "Nuevo hechizo"}
             </h2>
@@ -280,20 +279,20 @@ export function SpellFormModal({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="apple-press flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-muted hover:bg-surface-elevated hover:text-ink"
+              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
-          {/* Step Navigation Bar with Left / Right Arrows (Flechitas) */}
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-border-subtle bg-canvas p-1.5">
+          {/* Step Navigation Bar with Left / Right Arrows (Concentric: outer 14px - 5px pad = 9px inner) */}
+          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-[14px] border border-border-subtle bg-canvas p-1.5 sm:mt-3">
             <button
               type="button"
               disabled={step === 0}
               onClick={goPrev}
               aria-label="Paso anterior"
-              className="apple-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30"
+              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -312,7 +311,7 @@ export function SpellFormModal({
               disabled={step === totalSteps - 1}
               onClick={goNext}
               aria-label="Siguiente paso"
-              className="apple-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30"
+              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -763,7 +762,6 @@ export function SpellFormModal({
             <span>{saving ? "Guardando..." : "Guardar"}</span>
           </button>
         </div>
-      </div>
-    </div>
+    </IosBottomSheet>
   );
 }

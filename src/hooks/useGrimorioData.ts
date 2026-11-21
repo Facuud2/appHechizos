@@ -4,13 +4,28 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { BootstrapPayload, IngredientItem } from "@/types/app";
 
+export class HttpError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
+
 export const GRIMORIO_QUERY_KEY = ["grimorio-bootstrap"] as const;
 
 async function fetchBootstrap(): Promise<BootstrapPayload> {
   const res = await fetch("/api/bootstrap", { cache: "no-store" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Error al cargar los datos");
+    const defaultMsg =
+      res.status === 401
+        ? "Tu sesión expiró (401). Iniciá sesión nuevamente."
+        : res.status === 403
+          ? "Acceso denegado (403). Este grimorio es privado."
+          : "Error al cargar los datos del grimorio.";
+    throw new HttpError(err.error || defaultMsg, res.status);
   }
   return res.json();
 }
@@ -19,6 +34,15 @@ export function useGrimorio() {
   return useQuery({
     queryKey: GRIMORIO_QUERY_KEY,
     queryFn: fetchBootstrap,
+    retry: (failureCount, error) => {
+      if (
+        error instanceof HttpError &&
+        (error.status === 401 || error.status === 403 || error.status === 404)
+      ) {
+        return false;
+      }
+      return failureCount < 1;
+    },
   });
 }
 

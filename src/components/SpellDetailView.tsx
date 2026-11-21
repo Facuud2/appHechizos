@@ -35,7 +35,12 @@ import { evaluateVariationAvailability } from "@/lib/domain/matching";
 import { calculateVariationCost } from "@/lib/domain/costing";
 import { formatArs, formatDualPrice, prepareMediaFile } from "@/lib/format";
 import { removeEntityCover, uploadEntityCover } from "@/lib/upload-cover";
+import { IosBottomSheet } from "./IosBottomSheet";
 import { QuickIngredientModal } from "./QuickIngredientModal";
+import {
+  ProgressiveImage,
+  SpellDetailSkeleton,
+} from "./Skeletons";
 import { SpellFormModal } from "./SpellFormModal";
 import { UNIT_LABELS, type SpellItem, type SpellVariationItem } from "@/types/app";
 import type { UnitType } from "@/db/schema";
@@ -162,18 +167,13 @@ export function SpellDetailView({
   }
 
   if (isLoading && !spell) {
-    return (
-      <div className="space-y-4">
-        <div className="h-10 w-40 animate-pulse rounded-xl bg-surface" />
-        <div className="h-44 animate-pulse rounded-2xl border border-border-subtle bg-surface" />
-      </div>
-    );
+    return <SpellDetailSkeleton />;
   }
 
   if (!spell || !activeVariation) {
     return (
-      <div className="rounded-2xl border border-border-subtle bg-surface p-8 text-center">
-        <p className="section-heading text-2xl font-semibold text-ink">
+      <div className="rounded-[16px] border border-border-subtle bg-surface p-5 text-center sm:p-8">
+        <p className="section-heading text-[20px] font-semibold text-ink sm:text-2xl">
           Hechizo no encontrado
         </p>
         <Link
@@ -527,17 +527,17 @@ export function SpellDetailView({
       <div className="flex items-center justify-between gap-2">
         <Link
           href="/"
-          className="apple-press inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border-subtle bg-surface px-3.5 py-2 text-xs font-medium text-ink-muted hover:border-border-strong hover:text-ink"
+          className="apple-press hit-44 inline-flex min-h-9 items-center gap-1.5 rounded-[10px] border border-border-subtle bg-surface px-3 py-1.5 text-xs font-medium text-ink-muted hover:border-border-strong hover:text-ink sm:min-h-10 sm:px-3.5 sm:py-2"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Hechizos
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             disabled={togglingPublish}
             onClick={handleQuickTogglePublish}
-            className={`apple-press inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${
+            className={`apple-press hit-44 inline-flex min-h-9 items-center gap-1.5 rounded-[10px] border px-2.5 py-1.5 text-xs font-semibold sm:min-h-10 sm:px-3 sm:py-2 ${
               spell.isPublished
                 ? "border-info/40 bg-info-soft text-info"
                 : "border-border-subtle bg-surface text-ink-muted hover:border-info hover:text-info"
@@ -554,7 +554,7 @@ export function SpellDetailView({
           <button
             type="button"
             onClick={() => setEditSpellOpen(true)}
-            className="apple-press inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-border-subtle bg-surface px-3 py-2 text-xs font-medium text-ink hover:border-accent"
+            className="apple-press hit-44 inline-flex min-h-9 items-center gap-1.5 rounded-[10px] border border-border-subtle bg-surface px-2.5 py-1.5 text-xs font-medium text-ink hover:border-accent sm:min-h-10 sm:px-3 sm:py-2"
           >
             <Edit3 className="h-3.5 w-3.5 text-accent-text" aria-hidden="true" /> Editar
           </button>
@@ -562,7 +562,7 @@ export function SpellDetailView({
             type="button"
             onClick={handleDeleteSpell}
             aria-label="Eliminar hechizo"
-            className="apple-press flex h-10 w-10 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink-dim hover:border-danger/50 hover:bg-danger-soft hover:text-danger"
+            className="apple-press hit-44 flex h-9 w-9 items-center justify-center rounded-[10px] border border-border-subtle bg-surface text-ink-dim hover:border-danger/50 hover:bg-danger-soft hover:text-danger sm:h-10 sm:w-10"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -570,17 +570,17 @@ export function SpellDetailView({
       </div>
 
       {/* Spell Header */}
-      <div className="rounded-2xl border border-border-subtle bg-surface p-4 sm:p-6">
-        {/* Cover Image Banner (if uploaded) */}
+      <div className="rounded-[18px] border border-border-subtle bg-surface p-3.5 sm:p-6">
+        {/* Cover Image Banner (if uploaded) — concentric r=12px inside r=18px */}
         {spell.imageUrl ? (
-          <div className="relative mb-4 overflow-hidden rounded-2xl border border-border-subtle bg-canvas">
-            <img
+          <div className="relative mb-3.5 h-44 overflow-hidden rounded-[12px] border border-border-subtle bg-canvas sm:mb-4 sm:h-60">
+            <ProgressiveImage
               src={spell.imageUrl}
               alt={spell.title}
-              className="h-48 w-full object-cover sm:h-60"
+              className="h-full w-full object-cover"
             />
             <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5">
-              <label className="apple-press inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-xl border border-border-subtle bg-surface/90 px-3 py-1.5 text-xs font-semibold text-ink backdrop-blur-sm">
+              <label className="apple-press hit-44 inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-[10px] border border-border-subtle bg-surface/90 px-3 py-1.5 text-xs font-semibold text-ink backdrop-blur-sm">
                 {uploadingCover ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                 ) : (
@@ -604,15 +604,15 @@ export function SpellDetailView({
                 disabled={uploadingCover}
                 onClick={handleRemoveSpellCover}
                 aria-label="Quitar foto de portada"
-                className="apple-press flex h-9 w-9 items-center justify-center rounded-xl border border-border-subtle bg-surface/90 text-ink hover:text-danger backdrop-blur-sm"
+                className="apple-press hit-44 flex h-9 w-9 items-center justify-center rounded-[10px] border border-border-subtle bg-surface/90 text-ink hover:text-danger backdrop-blur-sm"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
           </div>
         ) : (
-          <div className="mb-4">
-            <label className="apple-press inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-border-strong bg-canvas px-3.5 py-2 text-xs font-semibold text-ink-muted hover:border-accent hover:text-accent-text">
+          <div className="mb-3.5 sm:mb-4">
+            <label className="apple-press inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-dashed border-border-strong bg-canvas px-3.5 py-2 text-xs font-semibold text-ink-muted hover:border-accent hover:text-accent-text">
               {uploadingCover ? (
                 <Loader2 className="h-4 w-4 animate-spin text-accent-text" aria-hidden="true" />
               ) : (
@@ -637,10 +637,10 @@ export function SpellDetailView({
             </label>
           </div>
         )}
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2.5">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="display-heading text-3xl font-semibold text-ink sm:text-4xl">
+              <h1 className="display-heading text-[28px] font-bold tracking-[-0.02em] text-ink sm:text-4xl">
                 {spell.title}
               </h1>
               <span
@@ -662,13 +662,13 @@ export function SpellDetailView({
               </span>
             </div>
             {spell.purpose && (
-              <p className="mt-1.5 text-sm text-ink-muted">{spell.purpose}</p>
+              <p className="mt-1 text-[13px] text-ink-muted sm:text-sm">{spell.purpose}</p>
             )}
           </div>
 
           <div className="text-right tabular-nums">
             {spell.priceTiers.map((tier) => (
-              <p key={tier.id} className="text-sm font-semibold text-accent-text">
+              <p key={tier.id} className="whitespace-nowrap text-sm font-semibold text-accent-text">
                 {tier.label ? `${tier.label}: ` : ""}
                 {formatDualPrice(tier.priceArs, tier.priceUsd)}
               </p>
@@ -678,7 +678,7 @@ export function SpellDetailView({
 
         {/* Variation Switcher Bar (← → + horizontal swipe with pan-y) */}
         <div
-          className="mt-4 rounded-xl border border-border-subtle bg-canvas p-3 touch-pan-y"
+          className="mt-3.5 rounded-[12px] border border-border-subtle bg-canvas p-2.5 touch-pan-y sm:mt-4 sm:p-3"
           onTouchStart={(e) => {
             touchStartX.current = e.touches[0]?.clientX ?? null;
           }}
@@ -697,7 +697,7 @@ export function SpellDetailView({
               onClick={goPrevVariation}
               disabled={totalVariations <= 1}
               aria-label="Variación anterior"
-              className="apple-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30"
+              className="apple-press hit-44 flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-11 sm:w-11"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -723,17 +723,17 @@ export function SpellDetailView({
               onClick={goNextVariation}
               disabled={totalVariations <= 1}
               aria-label="Siguiente variación"
-              className="apple-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30"
+              className="apple-press hit-44 flex h-10 w-10 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-11 sm:w-11"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
-          <div className="mt-2.5 flex items-center justify-between border-t border-border-subtle pt-2.5">
+          <div className="mt-2 flex items-center justify-between border-t border-border-subtle pt-2">
             <button
               type="button"
               onClick={() => setNewVarOpen(true)}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-accent-text hover:underline"
+              className="hit-44 inline-flex items-center gap-1 text-xs font-semibold text-accent-text hover:underline"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Nueva variación desde esta versión
             </button>
@@ -742,7 +742,7 @@ export function SpellDetailView({
               <button
                 type="button"
                 onClick={handleDeleteVariation}
-                className="text-xs text-ink-dim hover:text-danger"
+                className="hit-44 text-xs text-ink-dim hover:text-danger"
               >
                 Eliminar variación
               </button>
@@ -751,8 +751,26 @@ export function SpellDetailView({
         </div>
       </div>
 
-      {/* Inner Segmented Tabs */}
-      <div className="grid grid-cols-3 gap-1 rounded-2xl border border-border-subtle bg-surface p-1.5 sm:max-w-xl">
+      {/* Inner Segmented Tabs (Sliding Concentric Pill: outer 14px - 4px pad = 10px inner) */}
+      <div
+        role="tablist"
+        aria-label="Secciones de la variación"
+        className="relative grid grid-cols-3 rounded-[14px] border border-border-subtle bg-surface p-1 sm:max-w-xl"
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            transform: `translateX(${
+              (activeTab === "ingredientes"
+                ? 0
+                : activeTab === "pasos"
+                  ? 1
+                  : 2) * 100
+            }%)`,
+          }}
+          className="pointer-events-none absolute top-1 bottom-1 left-1 w-[calc((100%-8px)/3)] rounded-[10px] bg-accent transition-transform duration-[200ms] ease-[var(--ease-in-out)]"
+        />
+
         {(
           [
             { id: "ingredientes", label: `Ingredientes (${activeVariation.ingredients.length})` },
@@ -763,10 +781,12 @@ export function SpellDetailView({
           <button
             key={tab.id}
             type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`apple-press min-h-10 rounded-xl px-2 py-2 text-xs font-semibold tabular-nums ${
+            className={`apple-press relative z-10 min-h-9 rounded-[10px] px-2 py-1.5 text-xs font-semibold tabular-nums transition-colors duration-[160ms] sm:min-h-10 sm:py-2 ${
               activeTab === tab.id
-                ? "bg-accent text-on-accent"
+                ? "text-on-accent"
                 : "text-ink-muted hover:text-ink"
             }`}
           >
@@ -776,7 +796,10 @@ export function SpellDetailView({
       </div>
 
       {/* TAB CONTENT */}
-      <div key={activeVariation.id} className="animate-variation-enter space-y-4">
+      <div
+        key={`${activeVariation.id}-${activeTab}`}
+        className="animate-variation-enter space-y-4"
+      >
         {activeTab === "ingredientes" && (
           <div className="space-y-4">
             {/* Perform Ritual CTA */}
@@ -837,11 +860,13 @@ export function SpellDetailView({
                       >
                         <div className="flex items-center gap-3">
                           {ing?.imageUrl ? (
-                            <img
-                              src={ing.imageUrl}
-                              alt={ing.name}
-                              className="h-10 w-10 shrink-0 rounded-xl border border-border-subtle object-cover"
-                            />
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-border-subtle">
+                              <ProgressiveImage
+                                src={ing.imageUrl}
+                                alt={ing.name}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
                           ) : null}
                           <span className="shrink-0">
                             {check?.status === "available" ? (
@@ -989,31 +1014,92 @@ export function SpellDetailView({
 
         {activeTab === "pasos" && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface px-4 py-3.5">
-              <div>
-                <p className="text-sm font-semibold text-ink">
-                  Procedimiento estandarizado
-                </p>
-                <p className="text-xs text-ink-muted">
-                  Tildá cada paso mientras trabajás en el altar y adjuntá fotos o videos guía.
-                </p>
+            <div className="space-y-3 rounded-2xl border border-border-subtle bg-surface px-4 py-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-ink">
+                    Procedimiento estandarizado
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    Tildá cada paso mientras trabajás en el altar y adjuntá fotos o videos guía.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleWakeLock}
+                  className={`apple-press inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold ${
+                    wakeLockActive
+                      ? "border-accent bg-accent-soft text-accent-text"
+                      : "border-border-subtle bg-canvas text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  <Sun className="h-3.5 w-3.5" aria-hidden="true" />
+                  {wakeLockActive ? "Pantalla activa" : "Mantener encendida"}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={toggleWakeLock}
-                className={`apple-press inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold ${
-                  wakeLockActive
-                    ? "border-accent bg-accent-soft text-accent-text"
-                    : "border-border-subtle bg-canvas text-ink-muted hover:text-ink"
-                }`}
-              >
-                <Sun className="h-3.5 w-3.5" aria-hidden="true" />
-                {wakeLockActive ? "Pantalla activa" : "Mantener encendida"}
-              </button>
+
+              {/* GPU-Composited Step Progress Bar (scaleX transform, zero layout cost) */}
+              {activeVariation.steps.length > 0 && (() => {
+                const completedCount = activeVariation.steps.filter(
+                  (s) => !!checkedSteps[s.id]
+                ).length;
+                const totalStepsCount = activeVariation.steps.length;
+                const progressRatio = completedCount / totalStepsCount;
+                const allComplete = completedCount === totalStepsCount;
+
+                return (
+                  <div className="space-y-2 border-t border-border-subtle pt-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-ink-muted tabular-nums">
+                        Progreso en altar:{" "}
+                        <strong className={allComplete ? "text-ready" : "text-ink"}>
+                          {completedCount} de {totalStepsCount}
+                        </strong>{" "}
+                        pasos
+                      </span>
+                      <span className="font-semibold text-accent-text tabular-nums">
+                        {Math.round(progressRatio * 100)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-canvas">
+                      <div
+                        style={{
+                          transform: `scaleX(${progressRatio})`,
+                        }}
+                        className={`h-full w-full origin-left rounded-full transition-transform duration-[220ms] ease-[var(--ease-out)] ${
+                          allComplete ? "bg-ready-solid" : "bg-accent"
+                        }`}
+                      />
+                    </div>
+                    {allComplete && (
+                      <div className="animate-variation-enter flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ready/35 bg-ready-soft/65 px-3 py-2 text-xs">
+                        <span className="font-semibold text-ready">
+                          ¡Todos los pasos del ritual completados!
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPerformCharged(
+                              effectiveSalePriceArs
+                                ? String(effectiveSalePriceArs)
+                                : ""
+                            );
+                            setPerformOpen(true);
+                          }}
+                          className="apple-press inline-flex items-center gap-1 rounded-lg bg-ready-solid px-2.5 py-1 font-semibold text-on-ready"
+                        >
+                          <Flame className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>Registrar y descontar stock</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {activeVariation.steps.length === 0 ? (
-              <div className="rounded-2xl border border-border-subtle bg-surface p-6 text-center text-sm text-ink-muted">
+              <div className="rounded-[16px] border border-border-subtle bg-surface p-4 text-center text-sm text-ink-muted sm:p-6">
                 Todavía no cargaste pasos en esta versión. Sumá el primer paso abajo.
               </div>
             ) : (
@@ -1032,17 +1118,24 @@ export function SpellDetailView({
                       <div className="flex items-start gap-3">
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            if (
+                              !done &&
+                              typeof navigator !== "undefined" &&
+                              "vibrate" in navigator
+                            ) {
+                              navigator.vibrate?.(10);
+                            }
                             setCheckedSteps((prev) => ({
                               ...prev,
                               [step.id]: !prev[step.id],
-                            }))
-                          }
+                            }));
+                          }}
                           aria-label={`Marcar paso ${step.stepNumber}`}
                           aria-pressed={done}
                           className={`apple-press mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums ${
                             done
-                              ? "border-ready-solid bg-ready-solid text-on-ready"
+                              ? "animate-check-pop border-ready-solid bg-ready-solid text-on-ready"
                               : "border-accent/50 text-accent-text"
                           }`}
                         >
@@ -1279,166 +1372,152 @@ export function SpellDetailView({
         )}
       </div>
 
-      {/* Create Variation Modal */}
-      {newVarOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="new-var-title"
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-[var(--bg-scrim)] p-0 sm:items-center sm:p-4"
-          onClick={() => setNewVarOpen(false)}
-        >
-          <div
-            className="animate-sheet-enter pb-sheet-safe w-full max-w-md rounded-t-3xl border border-border-subtle bg-surface p-5 sm:rounded-2xl sm:pb-5"
-            onClick={(e) => e.stopPropagation()}
+      {/* Create Variation Modal (with 1:1 Drag-to-Dismiss & Symmetric Exit) */}
+      <IosBottomSheet
+        open={newVarOpen}
+        onClose={() => setNewVarOpen(false)}
+        ariaLabelledBy="new-var-title"
+      >
+        <div className="pb-sheet-safe px-4 pt-1.5 pb-4 sm:p-5">
+          <h2
+            id="new-var-title"
+            className="section-heading text-[20px] font-semibold text-ink sm:text-2xl"
           >
-            <h2
-              id="new-var-title"
-              className="section-heading text-2xl font-semibold text-ink"
-            >
-              Nueva variación de {spell.title}
-            </h2>
-            <p className="mt-1 text-xs text-ink-muted">
-              Se copiarán los ingredientes y pasos de &ldquo;{activeVariation.name}&rdquo; para que solo modifiques lo que cambia.
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-ink-muted">
-                  Nombre de la variación *
-                </label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={newVarName}
-                  onChange={(e) => setNewVarName(e.target.value)}
-                  placeholder="Ej. Sin foto, Reforzado con miel, Improvisado..."
-                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-ink-muted">
-                  ¿Cuándo aplicarla? (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={newVarContext}
-                  onChange={(e) => setNewVarContext(e.target.value)}
-                  placeholder="Ej. Cuando la clienta no tiene foto o hay resistencia fuerte"
-                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setNewVarOpen(false)}
-                  className="apple-press min-h-11 rounded-xl border border-border-subtle px-4 py-2 text-sm font-medium text-ink-muted"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={!newVarName.trim() || creatingVar}
-                  onClick={handleCreateVariation}
-                  className="apple-press min-h-11 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {creatingVar ? "Creando..." : "Crear variación"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Perform Ritual & Deduct Stock Modal */}
-      {performOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="perform-ritual-title"
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-[var(--bg-scrim)] p-0 sm:items-center sm:p-4"
-          onClick={() => setPerformOpen(false)}
-        >
-          <div
-            className="animate-sheet-enter pb-sheet-safe w-full max-w-md rounded-t-3xl border border-border-subtle bg-surface p-5 sm:rounded-2xl sm:pb-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2
-              id="perform-ritual-title"
-              className="section-heading text-2xl font-semibold text-ink"
-            >
-              Registrar ritual realizado
-            </h2>
-            <p className="mt-1 text-xs text-ink-muted">
-              {spell.title} · {activeVariation.name}
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-ink-muted">
-                  Clienta / Referencia (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={performClient}
-                  onChange={(e) => setPerformClient(e.target.value)}
-                  placeholder="Ej. Cami M."
-                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-ink-muted">
-                  Monto cobrado (ARS)
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  value={performCharged}
-                  onChange={(e) => setPerformCharged(e.target.value)}
-                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-accent"
-                />
-              </div>
-              <label className="flex items-center gap-2.5 rounded-xl border border-border-subtle bg-canvas p-3 text-xs text-ink">
-                <input
-                  type="checkbox"
-                  checked={performDeduct}
-                  onChange={(e) => setPerformDeduct(e.target.checked)}
-                  className="h-4 w-4 accent-[var(--accent-solid)]"
-                />
-                <span>
-                  Descontar automáticamente los ingredientes de mi stock real
-                </span>
+            Nueva variación de {spell.title}
+          </h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            Se copiarán los ingredientes y pasos de &ldquo;{activeVariation.name}&rdquo; para que solo modifiques lo que cambia.
+          </p>
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">
+                Nombre de la variación *
               </label>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setPerformOpen(false)}
-                  className="apple-press min-h-11 rounded-xl border border-border-subtle px-4 py-2 text-sm font-medium text-ink-muted"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  disabled={performMut.isPending}
-                  onClick={async () => {
-                    await performMut.mutateAsync({
-                      variationId: activeVariation.id,
-                      deductStock: performDeduct,
-                      clientAlias: performClient.trim() || null,
-                      chargedArs:
-                        performCharged === "" ? null : Number(performCharged),
-                    });
-                    setPerformOpen(false);
-                    setPerformClient("");
-                  }}
-                  className="apple-press min-h-11 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {performMut.isPending ? "Registrando..." : "Confirmar"}
-                </button>
-              </div>
+              <input
+                type="text"
+                autoFocus
+                value={newVarName}
+                onChange={(e) => setNewVarName(e.target.value)}
+                placeholder="Ej. Sin foto, Reforzado con miel, Improvisado..."
+                className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">
+                ¿Cuándo aplicarla? (opcional)
+              </label>
+              <input
+                type="text"
+                value={newVarContext}
+                onChange={(e) => setNewVarContext(e.target.value)}
+                placeholder="Ej. Cuando la clienta no tiene foto o hay resistencia fuerte"
+                className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setNewVarOpen(false)}
+                className="apple-press min-h-11 rounded-xl border border-border-subtle px-4 py-2 text-sm font-medium text-ink-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!newVarName.trim() || creatingVar}
+                onClick={handleCreateVariation}
+                className="apple-press min-h-11 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
+              >
+                {creatingVar ? "Creando..." : "Crear variación"}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </IosBottomSheet>
+
+      {/* Perform Ritual & Deduct Stock Modal (with 1:1 Drag-to-Dismiss & Symmetric Exit) */}
+      <IosBottomSheet
+        open={performOpen}
+        onClose={() => setPerformOpen(false)}
+        ariaLabelledBy="perform-ritual-title"
+      >
+        <div className="pb-sheet-safe px-4 pt-1.5 pb-4 sm:p-5">
+          <h2
+            id="perform-ritual-title"
+            className="section-heading text-[20px] font-semibold text-ink sm:text-2xl"
+          >
+            Registrar ritual realizado
+          </h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            {spell.title} · {activeVariation.name}
+          </p>
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">
+                Clienta / Referencia (opcional)
+              </label>
+              <input
+                type="text"
+                value={performClient}
+                onChange={(e) => setPerformClient(e.target.value)}
+                placeholder="Ej. Cami M."
+                className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">
+                Monto cobrado (ARS)
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                value={performCharged}
+                onChange={(e) => setPerformCharged(e.target.value)}
+                className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-sm text-ink outline-none focus:border-accent"
+              />
+            </div>
+            <label className="flex items-center gap-2.5 rounded-xl border border-border-subtle bg-canvas p-3 text-xs text-ink">
+              <input
+                type="checkbox"
+                checked={performDeduct}
+                onChange={(e) => setPerformDeduct(e.target.checked)}
+                className="h-4 w-4 accent-[var(--accent-solid)]"
+              />
+              <span>
+                Descontar automáticamente los ingredientes de mi stock real
+              </span>
+            </label>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPerformOpen(false)}
+                className="apple-press min-h-11 rounded-xl border border-border-subtle px-4 py-2 text-sm font-medium text-ink-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={performMut.isPending}
+                onClick={async () => {
+                  await performMut.mutateAsync({
+                    variationId: activeVariation.id,
+                    deductStock: performDeduct,
+                    clientAlias: performClient.trim() || null,
+                    chargedArs:
+                      performCharged === "" ? null : Number(performCharged),
+                  });
+                  setPerformOpen(false);
+                  setPerformClient("");
+                }}
+                className="apple-press min-h-11 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
+              >
+                {performMut.isPending ? "Registrando..." : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </IosBottomSheet>
 
       <QuickIngredientModal
         open={quickIngOpen}

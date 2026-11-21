@@ -17,12 +17,26 @@ export function ThemeToggle({
   const { preference, resolved, setPreference, toggleTheme } = useTheme();
 
   if (variant === "segmented") {
+    const activeIndex = Math.max(
+      0,
+      OPTIONS.findIndex((o) => o.value === preference)
+    );
+
     return (
       <div
         role="radiogroup"
         aria-label="Tema de apariencia"
-        className="grid grid-cols-3 gap-1 rounded-xl border border-border-subtle bg-canvas p-1"
+        className="relative grid grid-cols-3 rounded-xl border border-border-subtle bg-canvas p-1"
       >
+        {/* Sliding Concentric Active Thumb (Outer 12px - 4px pad = 8px inner) */}
+        <span
+          aria-hidden="true"
+          style={{
+            transform: `translateX(${activeIndex * 100}%)`,
+          }}
+          className="pointer-events-none absolute top-1 bottom-1 left-1 w-[calc((100%-8px)/3)] rounded-lg border border-border-subtle bg-surface transition-transform duration-[180ms] ease-[var(--ease-in-out)]"
+        />
+
         {OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const active = preference === opt.value;
@@ -33,9 +47,9 @@ export function ThemeToggle({
               role="radio"
               aria-checked={active}
               onClick={() => setPreference(opt.value)}
-              className={`apple-press flex min-h-8 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium ${
+              className={`apple-press relative z-10 flex min-h-8 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors duration-[150ms] ${
                 active
-                  ? "bg-surface text-ink border border-border-subtle"
+                  ? "text-ink font-semibold"
                   : "text-ink-muted hover:text-ink"
               }`}
             >
@@ -56,13 +70,24 @@ export function ThemeToggle({
         resolved === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"
       }
       title={resolved === "dark" ? "Modo claro" : "Modo oscuro"}
-      className="apple-press flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink"
+      className="apple-press hit-44 relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink md:h-10 md:w-10"
     >
-      {resolved === "dark" ? (
-        <Sun className="h-4 w-4 text-accent-text" aria-hidden="true" />
-      ) : (
-        <Moon className="h-4 w-4 text-ink" aria-hidden="true" />
-      )}
+      <Sun
+        className={`h-4 w-4 text-accent-text transition-[transform,opacity,filter] duration-[160ms] ease-[var(--ease-out)] ${
+          resolved === "dark"
+            ? "scale-100 opacity-100 blur-0"
+            : "pointer-events-none absolute scale-75 opacity-0 blur-[2px]"
+        }`}
+        aria-hidden="true"
+      />
+      <Moon
+        className={`h-4 w-4 text-ink transition-[transform,opacity,filter] duration-[160ms] ease-[var(--ease-out)] ${
+          resolved !== "dark"
+            ? "scale-100 opacity-100 blur-0"
+            : "pointer-events-none absolute scale-75 opacity-0 blur-[2px]"
+        }`}
+        aria-hidden="true"
+      />
     </button>
   );
 }

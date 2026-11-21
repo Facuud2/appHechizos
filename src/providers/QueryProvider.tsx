@@ -70,6 +70,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
       <Toaster
         theme={resolved}
         position="top-center"
+        visibleToasts={3}
         toastOptions={{
           style: {
             background: "var(--bg-surface)",

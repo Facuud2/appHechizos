@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useCreateIngredient } from "@/hooks/useGrimorioData";
+import { IosBottomSheet } from "./IosBottomSheet";
 import type { IngredientItem } from "@/types/app";
 import type { StockLevel, UnitType } from "@/db/schema";
 
@@ -72,6 +73,7 @@ export function QuickIngredientModal({
   onCreated?: (ingredient: IngredientItem) => void;
 }) {
   const [step, setStep] = useState(0);
+  const [shakeTick, setShakeTick] = useState(0);
   const [name, setName] = useState(initialName);
   const [groupTag, setGroupTag] = useState("Hierbas");
   const [customGroups, setCustomGroups] = useState<string[]>([]);
@@ -96,8 +98,6 @@ export function QuickIngredientModal({
     setStockLevel("plenty");
     setUnitCostArs("");
   }, [open, initialName]);
-
-  if (!open) return null;
 
   const allGroups = Array.from(new Set([...DEFAULT_GROUP_TAGS, ...customGroups]));
 
@@ -146,6 +146,7 @@ export function QuickIngredientModal({
 
   function goNext() {
     if (step === 0 && !name.trim()) {
+      setShakeTick((t) => t + 1);
       toast.error("Escribí el nombre del producto antes de avanzar.");
       return;
     }
@@ -155,46 +156,47 @@ export function QuickIngredientModal({
   async function saveIngredient() {
     if (!name.trim()) {
       setStep(0);
+      setShakeTick((t) => t + 1);
       toast.error("El nombre del producto es obligatorio.");
       return;
     }
 
-    const res = await createMut.mutateAsync({
-      name: name.trim(),
-      groupTag,
-      unitType,
-      stockQty:
-        unitType === "qualitative" || stockQty === ""
-          ? null
-          : Number(stockQty),
-      stockLevel,
-      unitCostArs: unitCostArs === "" ? null : Number(unitCostArs),
-    });
+    try {
+      const res = await createMut.mutateAsync({
+        name: name.trim(),
+        groupTag,
+        unitType,
+        stockQty:
+          unitType === "qualitative" || stockQty === ""
+            ? null
+            : Number(stockQty),
+        stockLevel,
+        unitCostArs: unitCostArs === "" ? null : Number(unitCostArs),
+      });
 
-    onCreated?.(res.ingredient);
-    onClose();
+      onCreated?.(res.ingredient);
+      onClose();
+    } catch {
+      setShakeTick((t) => t + 1);
+    }
   }
 
   const totalSteps = INGREDIENT_STEPS.length;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="quick-ing-title"
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-[var(--bg-scrim)] p-0 sm:items-center sm:p-4"
-      onClick={onClose}
+    <IosBottomSheet
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="quick-ing-title"
+      maxWidthClass="max-w-md"
+      shakeTick={shakeTick}
     >
-      <div
-        className="animate-sheet-enter scroll-contain flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-border-subtle bg-surface sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Top Header + Arrow Stepper */}
-        <div className="border-b border-border-subtle px-5 pt-4 pb-3.5">
+      {/* Top Header + Arrow Stepper */}
+      <div className="border-b border-border-subtle px-4 pt-1.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
           <div className="flex items-center justify-between gap-2">
             <h2
               id="quick-ing-title"
-              className="section-heading text-xl font-semibold text-ink"
+              className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
             >
               Nuevo producto
             </h2>
@@ -202,20 +204,20 @@ export function QuickIngredientModal({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="apple-press flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-muted hover:bg-surface-elevated hover:text-ink"
+              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
-          {/* Step Navigation Bar with Left / Right Arrows (Flechitas) */}
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-border-subtle bg-canvas p-1.5">
+          {/* Step Navigation Bar with Left / Right Arrows (Concentric: outer 14px - 5px pad = 9px inner) */}
+          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-[14px] border border-border-subtle bg-canvas p-1.5 sm:mt-3">
             <button
               type="button"
               disabled={step === 0}
               onClick={goPrev}
               aria-label="Paso anterior"
-              className="apple-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30"
+              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
             >
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -234,7 +236,7 @@ export function QuickIngredientModal({
               disabled={step === totalSteps - 1}
               onClick={goNext}
               aria-label="Siguiente paso"
-              className="apple-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30"
+              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
             >
               <ChevronRight className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -547,7 +549,6 @@ export function QuickIngredientModal({
             <span>{createMut.isPending ? "Guardando..." : "Guardar"}</span>
           </button>
         </div>
-      </div>
-    </div>
+    </IosBottomSheet>
   );
 }

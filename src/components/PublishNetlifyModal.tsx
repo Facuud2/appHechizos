@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { useInvalidateGrimorio } from "@/hooks/useGrimorioData";
 import { formatDualPrice } from "@/lib/format";
+import { IosBottomSheet } from "./IosBottomSheet";
 import type { SpellItem } from "@/types/app";
 
 export function PublishNetlifyModal({
@@ -32,8 +33,6 @@ export function PublishNetlifyModal({
       setSelectedIds(spells.filter((s) => s.isPublished).map((s) => s.id));
     }
   }, [open, spells]);
-
-  if (!open) return null;
 
   const allSelected = spells.length > 0 && selectedIds.length === spells.length;
 
@@ -79,26 +78,22 @@ export function PublishNetlifyModal({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="publish-netlify-title"
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-[var(--bg-scrim)] p-0 sm:items-center sm:p-4"
-      onClick={onClose}
+    <IosBottomSheet
+      open={open}
+      onClose={onClose}
+      ariaLabelledBy="publish-netlify-title"
+      maxWidthClass="max-w-lg"
     >
-      <div
-        className="animate-sheet-enter pb-sheet-safe scroll-contain flex max-h-[88dvh] w-full max-w-lg flex-col rounded-t-3xl border border-border-subtle bg-surface p-5 sm:rounded-2xl sm:pb-5"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="pb-sheet-safe scroll-contain flex max-h-[82dvh] flex-col px-4 pt-1.5 pb-4 sm:p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-info-soft text-info">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-info-soft text-info sm:h-10 sm:w-10">
               <Globe className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
               <h2
                 id="publish-netlify-title"
-                className="section-heading text-xl font-semibold text-ink"
+                className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
               >
                 Subir a tarotdeluna.netlify.app
               </h2>
@@ -113,14 +108,14 @@ export function PublishNetlifyModal({
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="apple-press flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-ink-muted hover:bg-surface-elevated hover:text-ink"
+            className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Select all bar */}
-        <div className="mb-3 flex items-center justify-between rounded-xl border border-border-subtle bg-canvas px-3.5 py-2.5 text-xs">
+        <div className="mb-2.5 flex items-center justify-between rounded-[12px] border border-border-subtle bg-canvas px-3.5 py-2 text-xs">
           <span className="font-medium text-ink-muted tabular-nums">
             <strong className="text-ink">{selectedIds.length}</strong> de{" "}
             {spells.length} seleccionados para publicar
@@ -128,7 +123,7 @@ export function PublishNetlifyModal({
           <button
             type="button"
             onClick={toggleAll}
-            className="font-semibold text-accent-text hover:underline"
+            className="hit-44 font-semibold text-accent-text hover:underline"
           >
             {allSelected ? "Desmarcar todos" : "Seleccionar todos"}
           </button>
@@ -137,7 +132,7 @@ export function PublishNetlifyModal({
         {/* Spell checklist */}
         <div className="scroll-contain flex-1 space-y-2 overflow-y-auto pr-0.5">
           {spells.length === 0 ? (
-            <p className="py-8 text-center text-sm text-ink-muted">
+            <p className="py-5 text-center text-sm text-ink-muted sm:py-8">
               Todavía no creaste ningún hechizo.
             </p>
           ) : (
@@ -227,6 +222,6 @@ export function PublishNetlifyModal({
           </button>
         </div>
       </div>
-    </div>
+    </IosBottomSheet>
   );
 }
