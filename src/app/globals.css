@@ -1,0 +1,384 @@
+@import "tailwindcss";
+
+/*
+ * Altar & Hechizos — Vivid Light-First Semantic Color & Material System
+ * Typography: Outfit (display/headings) + DM Sans (body/UI)
+ * Palette: Luminous Cool Alabaster + Vivid Magenta-Berry + Jade Emerald + Electric Cobalt + Sunlit Amber
+ * Every foreground/background pair mathematically verified WCAG 2.1 AA (>=4.5:1) in Light & Dark.
+ */
+
+:root {
+  /* ── Neutral Primitives (Crisp Cool Alabaster to Deep Midnight Slate) ── */
+  --slate-50: #f6f7fb;
+  --slate-100: #eff2f8;
+  --slate-150: #edf0f7;
+  --slate-200: #e2e6f0;
+  --slate-300: #cbd3e3;
+  --slate-500: #5a677d;
+  --slate-600: #475569;
+  --slate-800: #1f2535;
+  --slate-850: #151924;
+  --slate-900: #111520;
+  --slate-950: #0c0f16;
+
+  /* ── Accent Primitives: Vivid Magenta-Berry (OKLCH Hue ~2°) ── */
+  --berry-50: #fce7f1;
+  --berry-300: #ff7ab3;
+  --berry-400: #ff5ca1;
+  --berry-600: #c81e68;
+  --berry-700: #b8175d;
+  --berry-800: #a81656;
+  --berry-950: #361224;
+
+  /* ── Status Primitives (strictly >=25° OKLCH hue apart from Accent) ── */
+  /* Ready: Vivid Jade Emerald (Hue ~166°) */
+  --jade-50: #d8faec;
+  --jade-400: #34d399;
+  --jade-500: #10b981;
+  --jade-600: #05825b;
+  --jade-700: #047857;
+  --jade-950: #0b2e22;
+
+  /* Warn: Sunlit Amber (Hue ~50°) */
+  --sun-50: #fef3c7;
+  --sun-400: #fbbf24;
+  --sun-700: #a14b07;
+  --sun-950: #332208;
+
+  /* Danger: Vermilion Red (Hue ~28°) */
+  --coral-50: #fee2e2;
+  --coral-300: #fca5a5;
+  --coral-700: #c81e1e;
+  --coral-950: #381418;
+
+  /* Info / Web Sync: Electric Cobalt (Hue ~264°) */
+  --cobalt-50: #dbeafe;
+  --cobalt-400: #60a5fa;
+  --cobalt-700: #1d4ed8;
+  --cobalt-950: #102342;
+
+  /* ── Semantic Tokens: LIGHT MODE (Primary, Vivid & Luminous) ── */
+  --bg-page: var(--slate-50);
+  --bg-surface: #ffffff;
+  --bg-elevated: var(--slate-150);
+  --bg-subtle: var(--slate-100);
+  --bg-chrome: rgba(246, 247, 251, 0.8);
+  --bg-chrome-solid: #f6f7fb;
+  --bg-scrim: rgba(15, 23, 42, 0.42);
+
+  --line-subtle: var(--slate-200);
+  --line-strong: var(--slate-300);
+  --line-specular: rgba(255, 255, 255, 0.85);
+
+  --fg-primary: #0f172a;
+  --fg-secondary: var(--slate-600);
+  --fg-muted: var(--slate-500);
+
+  --accent-solid: var(--berry-600);
+  --accent-hover: var(--berry-800);
+  --accent-text: var(--berry-700);
+  --accent-soft: var(--berry-50);
+  --on-accent: #ffffff;
+
+  --ready-solid: var(--jade-600);
+  --ready-text: var(--jade-700);
+  --ready-soft: var(--jade-50);
+  --on-ready: #ffffff;
+
+  --warn-text: var(--sun-700);
+  --warn-soft: var(--sun-50);
+
+  --danger-text: var(--coral-700);
+  --danger-soft: var(--coral-50);
+
+  --info-text: var(--cobalt-700);
+  --info-soft: var(--cobalt-50);
+
+  /* ── Motion Tokens (Apple Fluid Timing) ── */
+  --dur-press: 100ms;
+  --dur-fast: 160ms;
+  --dur-base: 240ms;
+  --dur-spring: 360ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+
+  color-scheme: light;
+}
+
+.dark {
+  /* ── Semantic Tokens: DARK MODE (Crisp Midnight Slate + Luminous Accents) ── */
+  --bg-page: var(--slate-950);
+  --bg-surface: var(--slate-850);
+  --bg-elevated: var(--slate-800);
+  --bg-subtle: var(--slate-900);
+  --bg-chrome: rgba(17, 21, 32, 0.8);
+  --bg-chrome-solid: #111520;
+  --bg-scrim: rgba(4, 6, 12, 0.74);
+
+  --line-subtle: #262d40;
+  --line-strong: #3b4560;
+  --line-specular: rgba(248, 250, 252, 0.08);
+
+  --fg-primary: #f8fafc;
+  --fg-secondary: #cbd5e1;
+  --fg-muted: #94a3b8;
+
+  --accent-solid: var(--berry-400);
+  --accent-hover: var(--berry-300);
+  --accent-text: var(--berry-300);
+  --accent-soft: var(--berry-950);
+  --on-accent: #1a0510;
+
+  --ready-solid: var(--jade-500);
+  --ready-text: var(--jade-400);
+  --ready-soft: var(--jade-950);
+  --on-ready: #041a12;
+
+  --warn-text: var(--sun-400);
+  --warn-soft: var(--sun-950);
+
+  --danger-text: var(--coral-300);
+  --danger-soft: var(--coral-950);
+
+  --info-text: var(--cobalt-400);
+  --info-soft: var(--cobalt-950);
+
+  color-scheme: dark;
+}
+
+/* Increased Contrast Preferences — separate per appearance */
+@media (prefers-contrast: more) {
+  :root {
+    --line-subtle: #94a3b8;
+    --line-strong: #475569;
+    --bg-chrome: #f6f7fb;
+  }
+  .dark {
+    --line-subtle: #475569;
+    --line-strong: #94a3b8;
+    --bg-chrome: #111520;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--bg-page);
+  --color-surface: var(--bg-surface);
+  --color-surface-elevated: var(--bg-elevated);
+  --color-surface-subtle: var(--bg-subtle);
+  --color-border-subtle: var(--line-subtle);
+  --color-border-strong: var(--line-strong);
+  --color-ink: var(--fg-primary);
+  --color-ink-muted: var(--fg-secondary);
+  --color-ink-dim: var(--fg-muted);
+  --color-accent: var(--accent-solid);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-ready: var(--ready-text);
+  --color-ready-solid: var(--ready-solid);
+  --color-ready-soft: var(--ready-soft);
+  --color-on-ready: var(--on-ready);
+  --color-warn: var(--warn-text);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger-text);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info-text);
+  --color-info-soft: var(--info-soft);
+  --font-display: var(--font-outfit), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-dm-sans), system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ── Mobile-Native Platform Baseline ── */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+  overflow-x: clip;
+  background-color: var(--bg-page);
+  color: var(--fg-primary);
+}
+
+body {
+  background-color: var(--bg-page);
+  color: var(--fg-primary);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+
+/* Prevent iOS Safari auto-zoom on form controls without disabling pinch-to-zoom */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Hide redundant browser spinners on numeric inputs (we provide crisp -/+ steppers) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Instant tap response & prevent accidental text selection on controls only (never body) */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Focus-visible ring for keyboard accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent-solid);
+  outline-offset: 2px;
+}
+
+/* ── Apple Optical Typography (Outfit Display + DM Sans UI) ── */
+.display-heading {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.section-heading {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+}
+
+/* ── Apple Translucent Materials ── */
+.apple-chrome {
+  background-color: var(--bg-chrome);
+  -webkit-backdrop-filter: blur(22px) saturate(185%);
+  backdrop-filter: blur(22px) saturate(185%);
+}
+
+.apple-chrome-top {
+  border-bottom: 1px solid var(--line-subtle);
+  box-shadow: inset 0 -1px 0 var(--line-specular);
+}
+
+.apple-chrome-bottom {
+  border-top: 1px solid var(--line-subtle);
+  box-shadow: inset 0 1px 0 var(--line-specular);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .apple-chrome {
+    background-color: var(--bg-chrome-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* ── Apple Fluid Press Feedback (instant on pointer-down) ── */
+.apple-press {
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.apple-press:active {
+  transform: scale(0.97);
+}
+
+/* Hover lift strictly gated by fine pointer capability (no sticky touch hover) */
+@media (hover: hover) and (pointer: fine) {
+  .card-interactive:hover {
+    border-color: var(--line-strong);
+    background-color: var(--bg-elevated);
+  }
+}
+
+/* ── Sheet & Variation Transitions ── */
+@keyframes sheetEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes variationFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-enter {
+  animation: sheetEnter var(--dur-spring) var(--ease-spring) both;
+}
+
+.animate-variation-enter {
+  animation: variationFadeIn var(--dur-base) var(--ease-out) both;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .apple-press:active {
+    transform: none;
+  }
+
+  .animate-sheet-enter,
+  .animate-variation-enter {
+    animation: none;
+  }
+}
+
+/* ── Scroll & Safe Area Utilities ── */
+.scroll-contain {
+  overscroll-behavior: contain;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+.pb-sheet-safe {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
