@@ -197,14 +197,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="Navegación inferior"
         className="apple-chrome apple-chrome-bottom pb-safe fixed bottom-0 left-0 right-0 z-40 w-full md:hidden"
       >
-        <div className="relative mx-auto grid max-w-md grid-cols-5 px-2 pt-1">
+        <div
+          style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}
+          className="relative mx-auto grid max-w-md px-2 pt-1"
+        >
           {/* GPU-Composited Sliding Active Pill (160ms high-frequency rule) */}
           <span
             aria-hidden="true"
             style={{
+              width: "calc((100% - 16px) / 5)",
               transform: `translateX(${activeNavIndex * 100}%)`,
             }}
-            className="pointer-events-none absolute top-1 bottom-0 left-2 w-[calc((100%-16px)/5)] rounded-[11px] bg-accent-soft transition-transform duration-[160ms] ease-[var(--ease-out)]"
+            className="pointer-events-none absolute top-1 bottom-0 left-2 rounded-[11px] bg-accent-soft transition-transform duration-[160ms] ease-[var(--ease-out)]"
           />
 
           {NAV_ITEMS.map((item, idx) => {

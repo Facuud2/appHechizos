@@ -12,12 +12,9 @@ import {
   FolderPlus,
   Globe,
   GripVertical,
-  Layers,
   Loader2,
-  Lock,
   Plus,
   RotateCcw,
-  ShieldCheck,
   Sparkles,
   Tag,
   Trash2,
@@ -74,15 +71,11 @@ interface ActiveDragState {
   id: string;
   title: string;
   subtitle?: string;
-  sourceCatId?: string | null;
-  startX: number;
-  startY: number;
   currentX: number;
   currentY: number;
   grabOffsetX: number;
   grabOffsetY: number;
   width: number;
-  height: number;
 }
 
 function formatPublicPriceLine(
@@ -132,7 +125,7 @@ function toDraftSpells(spells: SpellItem[]): DraftSpell[] {
     }));
 }
 
-export default function ElementorWebBuilderPage() {
+export default function WebBuilderPage() {
   const { data, isLoading } = useGrimorio();
   const invalidate = useInvalidateGrimorio();
   const createCatMut = useCreateCategory();
@@ -143,45 +136,36 @@ export default function ElementorWebBuilderPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Elementor Mode: 'builder' shows selection frames, drag handles, and drop zones;
-  // 'clean' shows the pure client view without handles
-  const [viewMode, setViewMode] = useState<"builder" | "clean">("builder");
-  const [showEmptyCategories, setShowEmptyCategories] = useState(true);
+  // 'edit' = Elementor handles active; 'preview' = clean client view
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  // Currently selected widget/section in the canvas
+  // Bottom Sheets (unified across Mobile & PC for zero visual clutter)
   const [selected, setSelected] = useState<SelectedElement>(null);
-  // Bottom sheet open for mobile when tapping an element or "+ Agregar"
-  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
-  // New category modal/inline
-  const [addingCat, setAddingCat] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [newCatOpen, setNewCatOpen] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatIntro, setNewCatIntro] = useState("");
 
-  // Live Pointer Drag-and-Drop State (1:1 tracking for Touch + Mouse)
+  // 1:1 Pointer Drag State
   const [dragState, setDragState] = useState<ActiveDragState | null>(null);
   const categoryRefs = useRef<Map<string, HTMLElement>>(new Map());
   const spellRefs = useRef<Map<string, HTMLElement>>(new Map());
-  const canvasScrollRef = useRef<HTMLDivElement | null>(null);
 
-  // Sync server data into draft state whenever not dirty
   useEffect(() => {
     if (!data || isDirty) return;
     setDraftCategories(toDraftCategories(data.categories));
     setDraftSpells(toDraftSpells(data.spells));
   }, [data, isDirty]);
 
-  function handleDiscardChanges() {
+  function handleDiscard() {
     if (!data) return;
     setDraftCategories(toDraftCategories(data.categories));
     setDraftSpells(toDraftSpells(data.spells));
     setIsDirty(false);
     setSelected(null);
-    toast.info("Cambios descartados. Se restauró la versión publicada.");
+    toast.info("Cambios descartados.");
   }
 
-  // Group spells by category
   const canvasCategories = useMemo(() => {
     return draftCategories.map((cat) => {
       const allInCat = draftSpells
@@ -189,17 +173,14 @@ export default function ElementorWebBuilderPage() {
         .sort(
           (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title)
         );
-      const publishedInCat = allInCat.filter((s) => s.isPublished);
       return {
         category: cat,
-        publishedSpells: publishedInCat,
+        publishedSpells: allInCat.filter((s) => s.isPublished),
         hiddenSpells: allInCat.filter((s) => !s.isPublished),
-        totalCount: allInCat.length,
       };
     });
   }, [draftCategories, draftSpells]);
 
-  // All hidden/private spells (available in the Widget Drawer to add/drag to the page)
   const privateSpells = useMemo(
     () =>
       draftSpells
@@ -213,7 +194,6 @@ export default function ElementorWebBuilderPage() {
     [draftSpells]
   );
 
-  // Selected objects for Inspector
   const selectedCategory = useMemo(
     () =>
       selected?.type === "category"
@@ -231,7 +211,7 @@ export default function ElementorWebBuilderPage() {
   );
 
   // =========================================================
-  // REORDERING & MUTATION HELPERS
+  // REORDERING & MUTATIONS
   // =========================================================
   function moveCategoryByIndex(fromIdx: number, toIdx: number) {
     if (
@@ -264,7 +244,6 @@ export default function ElementorWebBuilderPage() {
       const moving = prev.find((s) => s.id === spellId);
       if (!moving) return prev;
 
-      // Get current published spells in target category (excluding the moving spell)
       const targetSiblings = prev
         .filter(
           (s) =>
@@ -292,7 +271,6 @@ export default function ElementorWebBuilderPage() {
       const orderMap = new Map<string, number>();
       targetSiblings.forEach((s, i) => orderMap.set(s.id, i + 1));
 
-      // Also re-normalize source category if it changed
       const sourceCatId = moving.categoryId;
       if (sourceCatId && sourceCatId !== targetCategoryId) {
         const sourceSiblings = prev
@@ -362,9 +340,7 @@ export default function ElementorWebBuilderPage() {
           s.categoryId === patch.categoryId && s.isPublished && s.id !== spellId
       );
       moveSpellToPosition(spellId, patch.categoryId, targetSiblings.length);
-      if (Object.keys(patch).length === 1 && "categoryId" in patch) {
-        return;
-      }
+      if (Object.keys(patch).length === 1 && "categoryId" in patch) return;
     }
 
     setDraftSpells((prev) =>
@@ -374,7 +350,7 @@ export default function ElementorWebBuilderPage() {
   }
 
   // =========================================================
-  // 1:1 POINTER DRAG ENGINE (ELEMENTOR LIVE SORTING)
+  // 1:1 POINTER DRAG ENGINE (SINGLE NATURAL PAGE SCROLL)
   // =========================================================
   function startPointerDrag(
     e: React.PointerEvent,
@@ -382,8 +358,7 @@ export default function ElementorWebBuilderPage() {
     id: string,
     title: string,
     containerEl: HTMLElement | null,
-    subtitle?: string,
-    sourceCatId?: string | null
+    subtitle?: string
   ) {
     e.stopPropagation();
     e.preventDefault();
@@ -391,11 +366,9 @@ export default function ElementorWebBuilderPage() {
     const rect = containerEl?.getBoundingClientRect() ?? {
       left: e.clientX - 140,
       top: e.clientY - 24,
-      width: 280,
-      height: 56,
+      width: 300,
     };
 
-    setSelected({ type: kind, id });
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       navigator.vibrate?.(12);
     }
@@ -405,15 +378,11 @@ export default function ElementorWebBuilderPage() {
       id,
       title,
       subtitle,
-      sourceCatId,
-      startX: e.clientX,
-      startY: e.clientY,
       currentX: e.clientX,
       currentY: e.clientY,
-      grabOffsetX: e.clientX - rect.left,
-      grabOffsetY: e.clientY - rect.top,
-      width: Math.min(360, Math.max(240, rect.width)),
-      height: Math.min(110, Math.max(48, rect.height)),
+      grabOffsetX: Math.min(rect.width - 24, Math.max(16, e.clientX - rect.left)),
+      grabOffsetY: Math.min(48, Math.max(16, e.clientY - rect.top)),
+      width: Math.min(340, Math.max(240, rect.width)),
     });
   }
 
@@ -422,28 +391,18 @@ export default function ElementorWebBuilderPage() {
 
     function handlePointerMove(e: PointerEvent) {
       setDragState((prev) =>
-        prev
-          ? {
-              ...prev,
-              currentX: e.clientX,
-              currentY: e.clientY,
-            }
-          : null
+        prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null
       );
 
-      // Auto-scroll the canvas container if pointer is near top or bottom edge
-      if (canvasScrollRef.current) {
-        const scrollRect = canvasScrollRef.current.getBoundingClientRect();
-        const edgeZone = 55;
-        if (e.clientY < scrollRect.top + edgeZone) {
-          canvasScrollRef.current.scrollBy({ top: -10 });
-        } else if (e.clientY > scrollRect.bottom - edgeZone) {
-          canvasScrollRef.current.scrollBy({ top: 10 });
-        }
+      // Gentle window auto-scroll near viewport top/bottom edges
+      const vh = window.innerHeight;
+      if (e.clientY < 80) {
+        window.scrollBy({ top: -10 });
+      } else if (e.clientY > vh - 90) {
+        window.scrollBy({ top: 10 });
       }
 
       if (dragState?.kind === "category") {
-        // Check if pointer crossed another category's vertical midpoint
         const currentIdx = draftCategories.findIndex(
           (c) => c.id === dragState.id
         );
@@ -451,22 +410,20 @@ export default function ElementorWebBuilderPage() {
 
         for (let i = 0; i < draftCategories.length; i++) {
           if (i === currentIdx) continue;
-          const cat = draftCategories[i];
-          const el = categoryRefs.current.get(cat.id);
+          const el = categoryRefs.current.get(draftCategories[i].id);
           if (!el) continue;
           const r = el.getBoundingClientRect();
           const midY = r.top + r.height / 2;
 
           if (
-            (currentIdx < i && e.clientY > midY && e.clientY < r.bottom + 20) ||
-            (currentIdx > i && e.clientY < midY && e.clientY > r.top - 20)
+            (currentIdx < i && e.clientY > midY && e.clientY < r.bottom + 24) ||
+            (currentIdx > i && e.clientY < midY && e.clientY > r.top - 24)
           ) {
             moveCategoryByIndex(currentIdx, i);
             break;
           }
         }
       } else if (dragState?.kind === "spell") {
-        // 1. Find which category block the pointer is currently inside
         let hoveredCatId: string | null = null;
         for (const cat of draftCategories) {
           const catEl = categoryRefs.current.get(cat.id);
@@ -477,10 +434,8 @@ export default function ElementorWebBuilderPage() {
             break;
           }
         }
-
         if (!hoveredCatId) return;
 
-        // 2. Find index among published spells in hoveredCatId
         const catPublished = draftSpells
           .filter(
             (s) =>
@@ -498,14 +453,12 @@ export default function ElementorWebBuilderPage() {
           const spEl = spellRefs.current.get(catPublished[i].id);
           if (!spEl) continue;
           const sr = spEl.getBoundingClientRect();
-          const midY = sr.top + sr.height / 2;
-          if (e.clientY < midY) {
+          if (e.clientY < sr.top + sr.height / 2) {
             targetIdx = i;
             break;
           }
         }
 
-        // Check if spell is already at this category + index
         const currentMoving = draftSpells.find((s) => s.id === dragState.id);
         const currentAllPublishedInCat = draftSpells
           .filter((s) => s.categoryId === hoveredCatId && s.isPublished)
@@ -531,9 +484,7 @@ export default function ElementorWebBuilderPage() {
       setDragState(null);
     }
 
-    window.addEventListener("pointermove", handlePointerMove, {
-      passive: true,
-    });
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerUp);
 
@@ -545,9 +496,9 @@ export default function ElementorWebBuilderPage() {
   }, [dragState, draftCategories, draftSpells]);
 
   // =========================================================
-  // CATEGORY CRUD & PUBLISH
+  // CATEGORY CREATE / DELETE & PUBLISH
   // =========================================================
-  async function handleCreateNewCategory() {
+  async function handleCreateCategory() {
     if (!newCatName.trim()) return;
     const res = await createCatMut.mutateAsync({
       name: newCatName.trim(),
@@ -566,36 +517,34 @@ export default function ElementorWebBuilderPage() {
         },
       ];
     });
-    setSelected({ type: "category", id: res.category.id });
     setNewCatName("");
     setNewCatIntro("");
-    setAddingCat(false);
+    setNewCatOpen(false);
   }
 
   async function handleDeleteCategory(cat: DraftCategory) {
     const count = draftSpells.filter((s) => s.categoryId === cat.id).length;
     const msg =
       count > 0
-        ? `¿Eliminar la categoría "${cat.name}"? Sus ${count} hechizos pasarán a la primera categoría disponible.`
-        : `¿Eliminar la categoría "${cat.name}"?`;
+        ? `¿Eliminar "${cat.name}"? Sus ${count} hechizos pasarán a la primera categoría.`
+        : `¿Eliminar "${cat.name}"?`;
     if (!confirm(msg)) return;
     await deleteCatMut.mutateAsync(cat.id);
     const remaining = draftCategories.filter((c) => c.id !== cat.id);
-    const fallbackCatId = remaining[0]?.id ?? null;
+    const fallbackId = remaining[0]?.id ?? null;
 
     setDraftCategories(
       remaining.map((c, idx) => ({ ...c, sortOrder: idx + 1 }))
     );
     setDraftSpells((prev) =>
       prev.map((s) =>
-        s.categoryId === cat.id ? { ...s, categoryId: fallbackCatId } : s
+        s.categoryId === cat.id ? { ...s, categoryId: fallbackId } : s
       )
     );
     setSelected(null);
-    setMobileInspectorOpen(false);
   }
 
-  async function handleSaveAndPublish() {
+  async function handlePublish() {
     setSaving(true);
     try {
       const res = await fetch("/api/public/publish", {
@@ -631,1364 +580,598 @@ export default function ElementorWebBuilderPage() {
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error || "No se pudo sincronizar con la web");
+        throw new Error(json.error || "No se pudo publicar en la web");
       }
 
       setIsDirty(false);
       await invalidate();
       toast.success(
-        `¡Publicado en vivo! ${json.publishedCount} hechizos activos en tarotdeluna.netlify.app (0 tokens de Netlify consumidos).`
+        `¡Web actualizada! ${json.publishedCount} hechizos en vivo en tarotdeluna.netlify.app.`
       );
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Error al guardar cambios"
-      );
+      toast.error(err instanceof Error ? err.message : "Error al publicar");
     } finally {
       setSaving(false);
     }
   }
 
-  // =========================================================
-  // REUSABLE INSPECTOR CONTENT (DESKTOP SIDEBAR & MOBILE SHEET)
-  // =========================================================
-  function renderInspectorContent() {
-    if (selectedCategory) {
-      const catIdx = draftCategories.findIndex(
-        (c) => c.id === selectedCategory.id
-      );
-      const spellsInCat = draftSpells.filter(
-        (s) => s.categoryId === selectedCategory.id
-      );
-      const pubInCat = spellsInCat.filter((s) => s.isPublished).length;
-
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border-subtle pb-2.5">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-accent-text">
-                Sección / Categoría #{catIdx + 1}
-              </span>
-              <h3 className="section-heading text-base font-semibold text-ink">
-                {selectedCategory.name}
-              </h3>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={catIdx <= 0}
-                onClick={() => moveCategoryByIndex(catIdx, catIdx - 1)}
-                title="Subir sección"
-                className="apple-press flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-canvas text-ink-muted hover:text-ink disabled:opacity-30"
-              >
-                <ArrowUp className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                disabled={catIdx >= draftCategories.length - 1}
-                onClick={() => moveCategoryByIndex(catIdx, catIdx + 1)}
-                title="Bajar sección"
-                className="apple-press flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-canvas text-ink-muted hover:text-ink disabled:opacity-30"
-              >
-                <ArrowDown className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-muted">
-              Título de la categoría en la web
-            </label>
-            <input
-              type="text"
-              value={selectedCategory.name}
-              onChange={(e) =>
-                updateCategoryField(selectedCategory.id, {
-                  name: e.target.value,
-                })
-              }
-              className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-muted">
-              Texto introductorio debajo del título (opcional)
-            </label>
-            <textarea
-              rows={3}
-              value={selectedCategory.publicIntro ?? ""}
-              onChange={(e) =>
-                updateCategoryField(selectedCategory.id, {
-                  publicIntro: e.target.value || null,
-                })
-              }
-              placeholder="Ej. Según tu caso y lo que quieras lograr, podés solicitar un ritual a medida..."
-              className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-xs text-ink outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl border border-border-subtle bg-canvas p-3 text-xs">
-            <span className="text-ink-muted">
-              Visibles en esta sección:{" "}
-              <strong className="text-ink tabular-nums">
-                {pubInCat} de {spellsInCat.length}
-              </strong>
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                handleDeleteCategory(selectedCategory)
-              }
-              className="inline-flex items-center gap-1 font-semibold text-danger hover:underline"
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Eliminar sección</span>
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    if (selectedSpell) {
-      const effectiveDesc =
-        selectedSpell.publicDescription || selectedSpell.purpose || "";
-
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-border-subtle pb-2.5">
-            <div className="min-w-0 flex-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-info">
-                Widget de Hechizo
-              </span>
-              <h3 className="section-heading truncate text-base font-semibold text-ink">
-                {selectedSpell.title}
-              </h3>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => stepSpellInCategory(selectedSpell.id, -1)}
-                title="Subir posición"
-                className="apple-press flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-canvas text-ink-muted hover:text-ink"
-              >
-                <ArrowUp className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={() => stepSpellInCategory(selectedSpell.id, 1)}
-                title="Bajar posición"
-                className="apple-press flex h-8 w-8 items-center justify-center rounded-lg border border-border-subtle bg-canvas text-ink-muted hover:text-ink"
-              >
-                <ArrowDown className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
-          {/* Public / Private Switch + Category Selector */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                updateSpellDraft(selectedSpell.id, {
-                  isPublished: !selectedSpell.isPublished,
-                })
-              }
-              className={`apple-press flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${
-                selectedSpell.isPublished
-                  ? "border-info/50 bg-info-soft text-info"
-                  : "border-border-subtle bg-canvas text-ink-muted"
-              }`}
-            >
-              {selectedSpell.isPublished ? (
-                <>
-                  <Globe className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>En Web (Público)</span>
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Oculto (Privado)</span>
-                </>
-              )}
-            </button>
-
-            <select
-              aria-label="Categoría del hechizo"
-              value={selectedSpell.categoryId ?? ""}
-              onChange={(e) =>
-                updateSpellDraft(selectedSpell.id, {
-                  categoryId: e.target.value || null,
-                })
-              }
-              className="min-h-10 rounded-xl border border-border-subtle bg-canvas px-2.5 text-xs font-semibold text-ink outline-none focus:border-accent"
-            >
-              {draftCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-muted">
-              Título público
-            </label>
-            <input
-              type="text"
-              value={selectedSpell.title}
-              onChange={(e) =>
-                updateSpellDraft(selectedSpell.id, {
-                  title: e.target.value,
-                })
-              }
-              className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-muted">
-              Subtítulo en cursiva (opcional)
-            </label>
-            <input
-              type="text"
-              value={selectedSpell.subtitleTag ?? ""}
-              onChange={(e) =>
-                updateSpellDraft(selectedSpell.id, {
-                  subtitleTag: e.target.value || null,
-                })
-              }
-              placeholder="Ej. Limpieza energética profunda + Purgado"
-              className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-xs text-ink outline-none focus:border-accent"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-muted">
-              Descripción para clientas
-            </label>
-            <textarea
-              rows={3}
-              value={selectedSpell.publicDescription ?? effectiveDesc}
-              onChange={(e) =>
-                updateSpellDraft(selectedSpell.id, {
-                  publicDescription: e.target.value || null,
-                })
-              }
-              placeholder="Explicá qué logra este ritual..."
-              className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-xs text-ink outline-none focus:border-accent"
-            />
-          </div>
-
-          {/* Prices */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-ink-muted">
-                Precios (ARS / USD)
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  updateSpellDraft(selectedSpell.id, {
-                    priceTiers: [
-                      ...selectedSpell.priceTiers,
-                      { label: "Potenciado", priceArs: 45000, priceUsd: 48 },
-                    ],
-                  })
-                }
-                className="apple-press inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-canvas px-2 py-1 text-[11px] font-semibold text-accent-text"
-              >
-                <Plus className="h-3 w-3" aria-hidden="true" />
-                <span>Nivel</span>
-              </button>
-            </div>
-
-            {selectedSpell.priceTiers.map((tier, tIdx) => (
-              <div
-                key={tIdx}
-                className="grid grid-cols-12 items-center gap-1.5"
-              >
-                <input
-                  type="text"
-                  value={tier.label}
-                  onChange={(e) => {
-                    const nextTiers = selectedSpell.priceTiers.map((item, i) =>
-                      i === tIdx ? { ...item, label: e.target.value } : item
-                    );
-                    updateSpellDraft(selectedSpell.id, {
-                      priceTiers: nextTiers,
-                    });
-                  }}
-                  placeholder="Simple"
-                  className="col-span-4 rounded-xl border border-border-subtle bg-canvas px-2 py-1.5 text-xs text-ink outline-none focus:border-accent"
-                />
-                <div className="col-span-4 flex items-center rounded-xl border border-border-subtle bg-canvas px-2 py-1.5">
-                  <span className="mr-1 text-xs text-ink-dim">$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    value={tier.priceArs}
-                    onChange={(e) => {
-                      const nextTiers = selectedSpell.priceTiers.map(
-                        (item, i) =>
-                          i === tIdx
-                            ? { ...item, priceArs: Number(e.target.value || 0) }
-                            : item
-                      );
-                      updateSpellDraft(selectedSpell.id, {
-                        priceTiers: nextTiers,
-                      });
-                    }}
-                    className="w-full bg-transparent tabular-nums text-xs font-semibold text-ink outline-none"
-                  />
-                </div>
-                <div className="col-span-3 flex items-center rounded-xl border border-border-subtle bg-canvas px-2 py-1.5">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
-                    value={tier.priceUsd}
-                    onChange={(e) => {
-                      const nextTiers = selectedSpell.priceTiers.map(
-                        (item, i) =>
-                          i === tIdx
-                            ? { ...item, priceUsd: Number(e.target.value || 0) }
-                            : item
-                      );
-                      updateSpellDraft(selectedSpell.id, {
-                        priceTiers: nextTiers,
-                      });
-                    }}
-                    className="w-full bg-transparent tabular-nums text-xs font-semibold text-ink outline-none"
-                  />
-                  <span className="ml-0.5 text-[10px] text-ink-dim">USD</span>
-                </div>
-                <div className="col-span-1 flex justify-end">
-                  {selectedSpell.priceTiers.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateSpellDraft(selectedSpell.id, {
-                          priceTiers: selectedSpell.priceTiers.filter(
-                            (_, i) => i !== tIdx
-                          ),
-                        })
-                      }
-                      className="text-ink-dim hover:text-danger"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Offer Toggle */}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas p-3">
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-ink">
-              <input
-                type="checkbox"
-                checked={selectedSpell.isOffer}
-                onChange={(e) =>
-                  updateSpellDraft(selectedSpell.id, {
-                    isOffer: e.target.checked,
-                  })
-                }
-                className="h-4 w-4 accent-[var(--accent-solid)]"
-              />
-              <Tag className="h-3.5 w-3.5 text-accent-text" aria-hidden="true" />
-              <span>Cartel de Oferta</span>
-            </label>
-
-            {selectedSpell.isOffer && (
-              <input
-                type="text"
-                value={selectedSpell.offerLabel ?? "¡OFERTA!"}
-                onChange={(e) =>
-                  updateSpellDraft(selectedSpell.id, {
-                    offerLabel: e.target.value,
-                  })
-                }
-                className="w-28 rounded-lg border border-border-subtle bg-surface px-2 py-1 text-xs font-bold text-accent-text outline-none focus:border-accent"
-              />
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="py-6 text-center text-xs text-ink-muted">
-        Tocá cualquier <strong>categoría</strong> o <strong>hechizo</strong> en
-        la vista previa móvil para editar su texto, precio u oferta, o
-        arrastralo desde el ícono{" "}
-        <GripVertical className="inline h-3.5 w-3.5 text-accent-text" /> para
-        cambiar su posición fija en la página.
-      </div>
-    );
-  }
-
   return (
     <AppShell>
-      {/* Top Studio Header */}
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="display-heading text-[26px] font-bold tracking-[-0.02em] text-ink sm:text-3xl">
-              Constructor Visual Web
+      {/* Centered Single-Column Mobile-First Workspace (identical on PC & Mobile!) */}
+      <div className="mx-auto w-full max-w-[430px] pb-20">
+        {/* 1. Compact Header (Congruent with Home / Stock / Explorar) */}
+        <header className="mb-3 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="display-heading truncate text-[26px] font-bold tracking-[-0.02em] text-ink sm:text-[28px]">
+              Web Pública
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-full border border-ready/35 bg-ready-soft px-2.5 py-0.5 text-xs font-semibold text-ready">
-              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Estilo Elementor · 0 tokens Netlify</span>
-            </span>
+            <p className="truncate text-xs text-ink-muted">
+              tarotdeluna.netlify.app ·{" "}
+              <span className="tabular-nums font-medium text-ink">
+                {totalPublishedCount} en vivo
+              </span>
+            </p>
           </div>
-          <p className="mt-0.5 text-xs text-ink-muted sm:text-sm">
-            Tocá o arrastrá desde{" "}
-            <GripVertical className="inline h-3.5 w-3.5 text-ink" /> cualquier
-            categoría o hechizo directamente sobre la vista móvil para
-            reposicionarlo.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {isDirty && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <a
+              href="https://tarotdeluna.netlify.app"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Abrir tarotdeluna.netlify.app"
+              title="Abrir tarotdeluna.netlify.app"
+              className="apple-press hit-44 flex h-10 w-10 items-center justify-center rounded-[12px] border border-border-subtle bg-surface text-ink-muted hover:border-border-strong hover:text-ink"
+            >
+              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            </a>
+
             <button
               type="button"
               disabled={saving}
-              onClick={handleDiscardChanges}
-              className="apple-press hit-44 inline-flex min-h-10 items-center gap-1.5 rounded-[12px] border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink-muted hover:border-border-strong hover:text-ink"
+              onClick={handlePublish}
+              className={`apple-press hit-44 inline-flex h-10 items-center gap-1.5 rounded-[12px] px-3.5 text-xs font-semibold ${
+                isDirty
+                  ? "bg-accent text-on-accent hover:bg-accent-hover"
+                  : "border border-info/35 bg-info-soft text-info"
+              }`}
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <UploadCloud className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>
+                {saving
+                  ? "Subiendo..."
+                  : isDirty
+                    ? "Publicar"
+                    : "Al día"}
+              </span>
+            </button>
+          </div>
+        </header>
+
+        {/* 2. Single Compact Control Bar (Zero stacked toolbars) */}
+        <div className="mb-3 flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setNewCatOpen(true)}
+              className="apple-press inline-flex h-9 items-center gap-1 rounded-[10px] border border-border-subtle bg-surface px-2.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent-text"
+            >
+              <FolderPlus className="h-3.5 w-3.5 text-accent-text" aria-hidden="true" />
+              <span>Categoría</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="apple-press inline-flex h-9 items-center gap-1 rounded-[10px] border border-border-subtle bg-surface px-2.5 text-xs font-semibold text-ink hover:border-info hover:text-info"
+            >
+              <Plus className="h-3.5 w-3.5 text-info" aria-hidden="true" />
+              <span>Ocultos ({privateSpells.length})</span>
+            </button>
+          </div>
+
+          {/* Clean Edit / Preview Segmented Toggle */}
+          <div
+            role="tablist"
+            aria-label="Modo de vista"
+            className="grid grid-cols-2 rounded-[10px] border border-border-subtle bg-surface p-0.5"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "edit"}
+              onClick={() => setMode("edit")}
+              className={`rounded-[8px] px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                mode === "edit"
+                  ? "bg-accent text-on-accent"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              Editar
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "preview"}
+              onClick={() => setMode("preview")}
+              className={`inline-flex items-center gap-1 rounded-[8px] px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                mode === "preview"
+                  ? "bg-accent text-on-accent"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <Eye className="h-3 w-3" aria-hidden="true" />
+              <span>Ver</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Subtle 1-line helper in edit mode */}
+        {mode === "edit" && (
+          <p className="mb-2.5 px-1 text-[11.5px] text-ink-dim">
+            Arrastrá desde{" "}
+            <GripVertical className="inline h-3.5 w-3.5 text-ink-muted" /> para
+            reordenar · Tocá cualquier título o hechizo para editarlo.
+          </p>
+        )}
+
+        {/* 3. DIRECT MOBILE CANVAS (NO INNER SCROLL! Natural single page flow) */}
+        {isLoading && !data ? (
+          <HomeGrimorioSkeleton includeStatusAndFilters={false} />
+        ) : (
+          <div
+            style={{
+              background:
+                "radial-gradient(circle at 50% 0%, #442725 0%, #1c1313 100%)",
+            }}
+            className="w-full overflow-hidden rounded-[24px] p-2.5 shadow-md sm:p-3.5"
+          >
+            {/* Compact Carrd Hero (@eltarotde_luna) */}
+            <div
+              style={{
+                background:
+                  "linear-gradient(135deg, #3c2220 0%, #231716 100%)",
+              }}
+              className="relative mb-2 flex h-[78px] w-full items-end justify-between overflow-hidden rounded-t-[18px] rounded-b-[12px] px-4 py-3 shadow-sm"
+            >
+              <span className="relative z-10 text-[17px] font-semibold tracking-[-0.01em] text-[#fbf9f5]">
+                @eltarotde_luna
+              </span>
+              <div
+                style={{ backgroundColor: "#e6cbc8", color: "#8c2d29" }}
+                className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M12 3.2 3 10.7h2.6V20h5v-5.3h2.8V20h5v-9.3H21L12 3.2z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Carrd Cream Card Body (#f7f3eb) */}
+            <div
+              style={{
+                backgroundColor: "#f7f3eb",
+                color: "#231d1b",
+              }}
+              className="w-full overflow-hidden rounded-[18px]"
+            >
+              <div className="p-3.5 sm:p-4">
+                {/* # Hechizos Title */}
+                <div
+                  style={{
+                    borderBottom: "1.5px solid rgba(140, 45, 41, 0.35)",
+                  }}
+                  className="mb-3.5 flex items-center justify-between pb-2"
+                >
+                  <h2
+                    style={{ color: "#8c2d29" }}
+                    className="text-[16px] font-bold underline underline-offset-4"
+                  >
+                    # Hechizos
+                  </h2>
+                  <span
+                    style={{ color: "#8c2d29" }}
+                    className="text-[11px] font-semibold opacity-70 tabular-nums"
+                  >
+                    {totalPublishedCount}{" "}
+                    {totalPublishedCount === 1 ? "ritual" : "rituales"}
+                  </span>
+                </div>
+
+                {/* Categories List */}
+                <div className="space-y-5">
+                  {canvasCategories.map(
+                    ({ category, publishedSpells, hiddenSpells }, catIdx) => {
+                      if (mode === "preview" && publishedSpells.length === 0) {
+                        return null;
+                      }
+
+                      const isCatDragging =
+                        dragState?.kind === "category" &&
+                        dragState.id === category.id;
+
+                      return (
+                        <section
+                          key={category.id}
+                          ref={(el) => {
+                            if (el) categoryRefs.current.set(category.id, el);
+                            else categoryRefs.current.delete(category.id);
+                          }}
+                          style={{
+                            opacity: isCatDragging ? 0.3 : 1,
+                            border:
+                              mode === "edit"
+                                ? "1px dashed rgba(140, 45, 41, 0.28)"
+                                : "none",
+                          }}
+                          className={`min-w-0 transition-opacity duration-150 ${
+                            mode === "edit"
+                              ? "rounded-[14px] bg-white/35 p-2.5"
+                              : ""
+                          }`}
+                        >
+                          {/* Category Header Row */}
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                              {mode === "edit" && (
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) =>
+                                    startPointerDrag(
+                                      e,
+                                      "category",
+                                      category.id,
+                                      category.name,
+                                      categoryRefs.current.get(category.id) ??
+                                        null,
+                                      `${publishedSpells.length} visibles`
+                                    )
+                                  }
+                                  style={{
+                                    touchAction: "none",
+                                    color: "#8c2d29",
+                                  }}
+                                  aria-label={`Arrastrar categoría ${category.name}`}
+                                  title="Arrastrar para reordenar categoría"
+                                  className="hit-44 mt-0.5 flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-md bg-[#8c2d29]/10 active:cursor-grabbing"
+                                >
+                                  <GripVertical className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                disabled={mode === "preview"}
+                                onClick={() =>
+                                  setSelected({
+                                    type: "category",
+                                    id: category.id,
+                                  })
+                                }
+                                className="min-w-0 flex-1 text-left"
+                              >
+                                <h3
+                                  style={{ color: "#8c2d29" }}
+                                  className="break-words text-[15px] font-bold leading-snug underline underline-offset-4"
+                                >
+                                  {category.name}
+                                </h3>
+                              </button>
+                            </div>
+
+                            {mode === "edit" && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelected({
+                                    type: "category",
+                                    id: category.id,
+                                  })
+                                }
+                                aria-label={`Editar ${category.name}`}
+                                style={{ color: "#8c2d29" }}
+                                className="hit-44 flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-[#8c2d29]/10 hover:opacity-100"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {category.publicIntro && (
+                            <p
+                              style={{ color: "#5a2220" }}
+                              className="mb-2.5 break-words text-[13px] leading-[1.45]"
+                            >
+                              {category.publicIntro}
+                            </p>
+                          )}
+
+                          {/* Spells inside Category */}
+                          {publishedSpells.length === 0 ? (
+                            <div
+                              style={{
+                                color: "#8c2d29",
+                                borderColor: "rgba(140, 45, 41, 0.22)",
+                              }}
+                              className="rounded-xl border border-dashed bg-white/45 px-3 py-2.5 text-center text-[11.5px]"
+                            >
+                              <p className="font-medium opacity-80">
+                                Sin hechizos visibles · Arrastrá uno aquí
+                              </p>
+                              {hiddenSpells.length > 0 && (
+                                <div className="mt-2 flex flex-wrap justify-center gap-1">
+                                  {hiddenSpells.slice(0, 4).map((hs) => (
+                                    <button
+                                      key={hs.id}
+                                      type="button"
+                                      onClick={() =>
+                                        updateSpellDraft(hs.id, {
+                                          isPublished: true,
+                                        })
+                                      }
+                                      style={{
+                                        backgroundColor: "#e6cbc8",
+                                        color: "#8c2d29",
+                                      }}
+                                      className="inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                                    >
+                                      <Plus className="h-3 w-3 shrink-0" />
+                                      <span className="truncate">
+                                        {hs.title}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-[#8c2d29]/15">
+                              {publishedSpells.map((spell) => {
+                                const isSpellDragging =
+                                  dragState?.kind === "spell" &&
+                                  dragState.id === spell.id;
+                                const desc =
+                                  spell.publicDescription ||
+                                  spell.purpose ||
+                                  null;
+
+                                return (
+                                  <article
+                                    key={spell.id}
+                                    ref={(el) => {
+                                      if (el) spellRefs.current.set(spell.id, el);
+                                      else spellRefs.current.delete(spell.id);
+                                    }}
+                                    style={{
+                                      opacity: isSpellDragging ? 0.25 : 1,
+                                    }}
+                                    className="flex min-w-0 items-start gap-2 py-2.5 first:pt-1 last:pb-0"
+                                  >
+                                    {/* Left Drag Handle (only in Edit mode) */}
+                                    {mode === "edit" && (
+                                      <button
+                                        type="button"
+                                        onPointerDown={(e) =>
+                                          startPointerDrag(
+                                            e,
+                                            "spell",
+                                            spell.id,
+                                            spell.title,
+                                            spellRefs.current.get(spell.id) ??
+                                              null,
+                                            spell.priceTiers[0]
+                                              ? formatPublicPriceLine(
+                                                  spell.priceTiers[0].label,
+                                                  spell.priceTiers[0].priceArs,
+                                                  spell.priceTiers[0].priceUsd
+                                                )
+                                              : undefined
+                                          )
+                                        }
+                                        style={{
+                                          touchAction: "none",
+                                          color: "#8c2d29",
+                                        }}
+                                        aria-label={`Arrastrar ${spell.title}`}
+                                        title="Arrastrar para mover posición o categoría"
+                                        className="hit-44 mt-0.5 flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-md hover:bg-[#8c2d29]/10 active:cursor-grabbing"
+                                      >
+                                        <GripVertical className="h-4 w-4 opacity-70" />
+                                      </button>
+                                    )}
+
+                                    {/* Center Content: Tap to inspect/edit */}
+                                    <button
+                                      type="button"
+                                      disabled={mode === "preview"}
+                                      onClick={() =>
+                                        setSelected({
+                                          type: "spell",
+                                          id: spell.id,
+                                        })
+                                      }
+                                      className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
+                                    >
+                                      <h4
+                                        style={{ color: "#8c2d29" }}
+                                        className="break-words text-[14.5px] font-bold leading-snug"
+                                      >
+                                        {spell.title}
+                                      </h4>
+
+                                      {spell.subtitleTag && (
+                                        <span
+                                          style={{ color: "#385766" }}
+                                          className="break-words text-[12px] font-semibold italic leading-snug"
+                                        >
+                                          {spell.subtitleTag}
+                                        </span>
+                                      )}
+
+                                      {desc && (
+                                        <p
+                                          style={{ color: "#5a2220" }}
+                                          className="break-words text-[13px] leading-[1.42]"
+                                        >
+                                          {desc}
+                                        </p>
+                                      )}
+
+                                      {spell.priceTiers.length > 0 && (
+                                        <div className="mt-0.5 flex flex-col gap-0.5">
+                                          {spell.priceTiers.map(
+                                            (price, pIdx) => (
+                                              <span
+                                                key={`${spell.id}-p-${pIdx}`}
+                                                style={{ color: "#4d1917" }}
+                                                className="inline-flex flex-wrap items-center gap-1.5 text-[13px] font-bold italic"
+                                              >
+                                                <span>
+                                                  {formatPublicPriceLine(
+                                                    price.label,
+                                                    price.priceArs,
+                                                    price.priceUsd
+                                                  )}
+                                                </span>
+                                                {spell.isOffer && pIdx === 0 && (
+                                                  <span
+                                                    style={{
+                                                      backgroundColor:
+                                                        "#8c2d29",
+                                                      color: "#fbf9f5",
+                                                    }}
+                                                    className="rounded-full px-2 py-0.5 text-[10px] font-bold not-italic tracking-wider"
+                                                  >
+                                                    {spell.offerLabel ||
+                                                      "¡OFERTA!"}
+                                                  </span>
+                                                )}
+                                              </span>
+                                            )
+                                          )}
+                                        </div>
+                                      )}
+                                    </button>
+
+                                    {/* Right Quick Hide Icon (only in Edit mode) */}
+                                    {mode === "edit" && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateSpellDraft(spell.id, {
+                                            isPublished: false,
+                                          })
+                                        }
+                                        aria-label={`Ocultar ${spell.title} de la web`}
+                                        title="Ocultar de la web"
+                                        style={{ color: "#8c2d29" }}
+                                        className="hit-44 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-55 hover:bg-[#8c2d29]/10 hover:opacity-100"
+                                      >
+                                        <EyeOff className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    }
+                  )}
+
+                  {mode === "preview" && totalPublishedCount === 0 && (
+                    <div className="py-8 text-center">
+                      <Sparkles
+                        style={{ color: "#8c2d29" }}
+                        className="mx-auto mb-2 h-5 w-5 opacity-70"
+                      />
+                      <p
+                        style={{ color: "#5a2220" }}
+                        className="text-xs font-medium"
+                      >
+                        No hay hechizos públicos todavía.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Carrd Footer Bar */}
+              <div
+                style={{
+                  backgroundColor: "#e6cbc8",
+                  color: "#8c2d29",
+                  borderTop: "1px solid rgba(140, 45, 41, 0.15)",
+                }}
+                className="flex items-center justify-between px-4 py-2.5 text-[13px] font-semibold"
+              >
+                <span>@eltarotde_luna</span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    style={{ backgroundColor: "#f7f3eb" }}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-[11px]"
+                  >
+                    𝕏
+                  </span>
+                  <span
+                    style={{ backgroundColor: "#f7f3eb" }}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-[11px]"
+                  >
+                    IG
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================
+          STICKY FLOATING PUBLISH PILL (ONLY WHEN DIRTY)
+         ========================================================= */}
+      {isDirty && (
+        <div className="fixed bottom-[74px] left-1/2 z-30 w-[calc(100%-32px)] max-w-[400px] -translate-x-1/2 md:bottom-6">
+          <div className="apple-chrome animate-pill-enter flex items-center justify-between gap-2 rounded-2xl border border-border-strong px-3 py-2 shadow-lg">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleDiscard}
+              className="apple-press inline-flex h-9 items-center gap-1 rounded-xl px-2.5 text-xs font-semibold text-ink-muted hover:text-ink"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Descartar</span>
             </button>
-          )}
 
-          <a
-            href="https://tarotdeluna.netlify.app"
-            target="_blank"
-            rel="noreferrer"
-            className="apple-press hit-44 inline-flex min-h-10 items-center gap-1.5 rounded-[12px] border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink hover:border-border-strong"
-          >
-            <span>Ver web real</span>
-            <ExternalLink className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
-          </a>
-
-          <button
-            type="button"
-            disabled={saving}
-            onClick={handleSaveAndPublish}
-            className={`apple-press hit-44 inline-flex min-h-10 items-center gap-1.5 rounded-[12px] px-4 py-2 text-xs font-semibold sm:text-sm ${
-              isDirty
-                ? "bg-accent text-on-accent shadow-sm hover:bg-accent-hover"
-                : "border border-info/40 bg-info-soft text-info hover:border-info"
-            }`}
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <UploadCloud className="h-4 w-4" aria-hidden="true" />
-            )}
-            <span>
-              {saving
-                ? "Publicando..."
-                : isDirty
-                  ? "Guardar y Publicar"
-                  : "Sincronizado"}
-            </span>
-          </button>
-        </div>
-      </header>
-
-      {/* Builder Action Bar (Mode Switch + Add Category + Private Drawer trigger on Mobile) */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[16px] border border-border-subtle bg-surface p-2.5 sm:px-3.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() =>
-              setViewMode((v) => (v === "builder" ? "clean" : "builder"))
-            }
-            className={`apple-press inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold ${
-              viewMode === "builder"
-                ? "border-accent bg-accent-soft text-accent-text"
-                : "border-border-subtle bg-canvas text-ink-muted"
-            }`}
-          >
-            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>
-              {viewMode === "builder"
-                ? "Modo Constructor (Arrastrar activo)"
-                : "Vista Limpia (Cliente)"}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowEmptyCategories((v) => !v)}
-            className={`apple-press inline-flex min-h-9 items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium ${
-              showEmptyCategories
-                ? "border-border-strong bg-canvas text-ink"
-                : "border-border-subtle bg-canvas text-ink-dim"
-            }`}
-          >
-            <span>
-              {showEmptyCategories
-                ? "Mostrando categorías vacías"
-                : "Ocultando categorías vacías"}
-            </span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setAddingCat((v) => !v)}
-            className="apple-press inline-flex min-h-9 items-center gap-1 rounded-xl bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent-text"
-          >
-            <FolderPlus className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>+ Categoría</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMobileDrawerOpen(true)}
-            className="apple-press inline-flex min-h-9 items-center gap-1 rounded-xl border border-info/40 bg-info-soft px-3 py-1.5 text-xs font-semibold text-info lg:hidden"
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Hechizos ({privateSpells.length} ocultos)</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Inline Create Category Banner */}
-      {addingCat && (
-        <div className="animate-variation-enter mb-4 rounded-[16px] border border-accent/40 bg-surface p-3.5">
-          <p className="mb-2 text-xs font-semibold text-ink">
-            Nueva sección de categoría en la página
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <input
-              type="text"
-              autoFocus
-              value={newCatName}
-              onChange={(e) => setNewCatName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newCatName.trim()) {
-                  e.preventDefault();
-                  handleCreateNewCategory();
-                }
-              }}
-              placeholder="Nombre (ej. Hechizos de Prosperidad y Dinero)..."
-              className="flex-1 rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-            />
-            <input
-              type="text"
-              value={newCatIntro}
-              onChange={(e) => setNewCatIntro(e.target.value)}
-              placeholder="Intro pública opcional..."
-              className="flex-1 rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-xs text-ink outline-none focus:border-accent"
-            />
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setAddingCat(false)}
-                className="apple-press rounded-xl border border-border-subtle px-3 py-2 text-xs font-medium text-ink-muted"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={!newCatName.trim() || createCatMut.isPending}
-                onClick={handleCreateNewCategory}
-                className="apple-press inline-flex items-center gap-1 rounded-xl bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent disabled:opacity-40"
-              >
-                <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Crear</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isLoading && !data ? (
-        <HomeGrimorioSkeleton />
-      ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-12">
-          {/* =========================================================
-              CENTER / LEFT (7 cols on Desktop): INTERACTIVE ELEMENTOR MOBILE CANVAS
-             ========================================================= */}
-          <div className="lg:col-span-7">
-            <div className="overflow-hidden rounded-[26px] border border-border-subtle shadow-xl">
-              {/* Mobile Device Top Frame */}
-              <div className="flex items-center justify-between border-b border-white/10 bg-[#1c1211] px-4 py-2.5 text-xs text-[#f7f3eb]/90">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-ready-solid" />
-                  <span className="font-semibold">
-                    Lienzo Móvil Interactivo · tarotdeluna.netlify.app
-                  </span>
-                </div>
-                <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-semibold tabular-nums">
-                  {totalPublishedCount} activos
-                </span>
-              </div>
-
-              {/* Carrd Outer Backdrop */}
-              <div
-                ref={canvasScrollRef}
-                style={{
-                  background:
-                    "radial-gradient(circle at 50% 20%, #442725 0%, #1c1313 100%)",
-                }}
-                className="scroll-contain max-h-[82dvh] overflow-y-auto px-3 py-5 sm:px-6"
-              >
-                <div className="mx-auto flex w-full max-w-[420px] flex-col gap-2.5">
-                  {/* Compact Hero Header (@eltarotde_luna) */}
-                  <div
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #3c2220 0%, #231716 100%)",
-                    }}
-                    className="relative flex h-[92px] w-full items-end justify-between overflow-hidden rounded-t-[20px] rounded-b-[14px] p-4 shadow-md"
-                  >
-                    <div
-                      style={{
-                        background:
-                          "linear-gradient(180deg, rgba(20,15,14,0.1) 0%, rgba(20,15,14,0.82) 100%)",
-                      }}
-                      className="absolute inset-0"
-                    />
-                    <div className="relative z-10 flex flex-col">
-                      <span className="text-[19px] font-semibold tracking-[-0.01em] text-[#fbf9f5] drop-shadow">
-                        @eltarotde_luna
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        backgroundColor: "#e6cbc8",
-                        color: "#8c2d29",
-                      }}
-                      className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full shadow"
-                    >
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M12 3.2 3 10.7h2.6V20h5v-5.3h2.8V20h5v-9.3H21L12 3.2z" />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Carrd Cream Card Body (#f7f3eb) */}
-                  <div
-                    style={{
-                      backgroundColor: "#f7f3eb",
-                      color: "#231d1b",
-                    }}
-                    className="flex flex-col overflow-hidden rounded-[22px] shadow-2xl"
-                  >
-                    <div className="p-4 sm:p-5">
-                      {/* # Hechizos Title */}
-                      <div
-                        style={{
-                          borderBottom: "1.5px solid rgba(140, 45, 41, 0.38)",
-                        }}
-                        className="mb-4 flex items-center justify-between pb-2"
-                      >
-                        <h2
-                          style={{ color: "#8c2d29" }}
-                          className="text-[16.5px] font-bold underline underline-offset-4"
-                        >
-                          # Hechizos
-                        </h2>
-                        {viewMode === "builder" && (
-                          <span
-                            style={{ color: "#8c2d29" }}
-                            className="text-[10.5px] font-semibold opacity-75"
-                          >
-                            Arrastrá{" "}
-                            <GripVertical className="inline h-3 w-3" /> para
-                            mover
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Category Sections inside the Live Mobile Canvas */}
-                      <div className="space-y-5">
-                        {canvasCategories.map(
-                          (
-                            {
-                              category,
-                              publishedSpells,
-                              hiddenSpells,
-                            },
-                            catIdx
-                          ) => {
-                            if (
-                              !showEmptyCategories &&
-                              publishedSpells.length === 0
-                            ) {
-                              return null;
-                            }
-                            if (
-                              viewMode === "clean" &&
-                              publishedSpells.length === 0
-                            ) {
-                              return null;
-                            }
-
-                            const isCatSelected =
-                              selected?.type === "category" &&
-                              selected.id === category.id;
-                            const isCatDragging =
-                              dragState?.kind === "category" &&
-                              dragState.id === category.id;
-
-                            return (
-                              <div
-                                key={category.id}
-                                ref={(el) => {
-                                  if (el)
-                                    categoryRefs.current.set(category.id, el);
-                                  else categoryRefs.current.delete(category.id);
-                                }}
-                                onClick={(e) => {
-                                  if (viewMode !== "builder") return;
-                                  e.stopPropagation();
-                                  setSelected({
-                                    type: "category",
-                                    id: category.id,
-                                  });
-                                }}
-                                style={{
-                                  border:
-                                    viewMode === "builder"
-                                      ? isCatSelected
-                                        ? "2px solid #8c2d29"
-                                        : "1.5px dashed rgba(140, 45, 41, 0.28)"
-                                      : "none",
-                                  backgroundColor:
-                                    viewMode === "builder"
-                                      ? isCatSelected
-                                        ? "rgba(140, 45, 41, 0.04)"
-                                        : "rgba(255, 255, 255, 0.35)"
-                                      : "transparent",
-                                  opacity: isCatDragging ? 0.35 : 1,
-                                }}
-                                className={`relative transition-all duration-150 ${
-                                  viewMode === "builder"
-                                    ? "rounded-2xl p-3 pt-4"
-                                    : ""
-                                }`}
-                              >
-                                {/* Elementor Section Top Tab Handle */}
-                                {viewMode === "builder" && (
-                                  <div
-                                    style={{
-                                      backgroundColor: isCatSelected
-                                        ? "#8c2d29"
-                                        : "#d8b7b3",
-                                      color: isCatSelected
-                                        ? "#fbf9f5"
-                                        : "#5a2220",
-                                    }}
-                                    className="mb-2 flex items-center justify-between rounded-lg px-2 py-1 text-[10.5px] font-bold shadow-2xs"
-                                  >
-                                    <div
-                                      onPointerDown={(e) =>
-                                        startPointerDrag(
-                                          e,
-                                          "category",
-                                          category.id,
-                                          category.name,
-                                          categoryRefs.current.get(
-                                            category.id
-                                          ) ?? null,
-                                          `${publishedSpells.length} hechizos visibles`
-                                        )
-                                      }
-                                      className="flex flex-1 cursor-grab items-center gap-1.5 active:cursor-grabbing"
-                                      title="Arrastrar categoría para cambiar su orden en la página"
-                                    >
-                                      <GripVertical className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="truncate">
-                                        SECCIÓN #{catIdx + 1}:{" "}
-                                        {category.name.toUpperCase()}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        disabled={catIdx === 0}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          moveCategoryByIndex(
-                                            catIdx,
-                                            catIdx - 1
-                                          );
-                                        }}
-                                        className="rounded p-0.5 hover:bg-black/10 disabled:opacity-30"
-                                        title="Subir categoría"
-                                      >
-                                        <ArrowUp className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          catIdx >= draftCategories.length - 1
-                                        }
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          moveCategoryByIndex(
-                                            catIdx,
-                                            catIdx + 1
-                                          );
-                                        }}
-                                        className="rounded p-0.5 hover:bg-black/10 disabled:opacity-30"
-                                        title="Bajar categoría"
-                                      >
-                                        <ArrowDown className="h-3 w-3" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelected({
-                                            type: "category",
-                                            id: category.id,
-                                          });
-                                          setMobileInspectorOpen(true);
-                                        }}
-                                        className="rounded p-0.5 hover:bg-black/10"
-                                        title="Editar categoría"
-                                      >
-                                        <Edit3 className="h-3 w-3" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Actual Carrd Category Title */}
-                                <h3
-                                  style={{ color: "#8c2d29" }}
-                                  className="mb-2.5 inline-block text-[15.5px] font-bold underline underline-offset-4"
-                                >
-                                  {category.name}
-                                </h3>
-
-                                {category.publicIntro && (
-                                  <p
-                                    style={{ color: "#5a2220" }}
-                                    className="mb-3 text-[13.5px] leading-[1.48]"
-                                  >
-                                    {category.publicIntro}
-                                  </p>
-                                )}
-
-                                {/* Spells Drop Zone inside Category */}
-                                {publishedSpells.length === 0 ? (
-                                  <div
-                                    style={{
-                                      borderColor: "rgba(140, 45, 41, 0.25)",
-                                      color: "#8c2d29",
-                                    }}
-                                    className="rounded-xl border border-dashed bg-white/40 p-3 text-center text-xs"
-                                  >
-                                    <p className="font-semibold">
-                                      Categoría sin hechizos públicos
-                                    </p>
-                                    <p className="mt-0.5 text-[11px] opacity-80">
-                                      Arrastrá un hechizo hasta acá o activá uno
-                                      de los ocultos abajo.
-                                    </p>
-                                    {hiddenSpells.length > 0 && (
-                                      <div className="mt-2 flex flex-wrap justify-center gap-1">
-                                        {hiddenSpells.map((hs) => (
-                                          <button
-                                            key={hs.id}
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              updateSpellDraft(hs.id, {
-                                                isPublished: true,
-                                              });
-                                            }}
-                                            style={{
-                                              backgroundColor: "#e6cbc8",
-                                              color: "#8c2d29",
-                                            }}
-                                            className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold shadow-2xs"
-                                          >
-                                            <Plus className="h-3 w-3" />
-                                            <span>{hs.title}</span>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col gap-3">
-                                    {publishedSpells.map((spell, spIdx) => {
-                                      const isLast =
-                                        spIdx === publishedSpells.length - 1;
-                                      const isSpellSelected =
-                                        selected?.type === "spell" &&
-                                        selected.id === spell.id;
-                                      const isSpellDragging =
-                                        dragState?.kind === "spell" &&
-                                        dragState.id === spell.id;
-                                      const desc =
-                                        spell.publicDescription ||
-                                        spell.purpose ||
-                                        null;
-
-                                      return (
-                                        <article
-                                          key={spell.id}
-                                          ref={(el) => {
-                                            if (el)
-                                              spellRefs.current.set(
-                                                spell.id,
-                                                el
-                                              );
-                                            else
-                                              spellRefs.current.delete(
-                                                spell.id
-                                              );
-                                          }}
-                                          onClick={(e) => {
-                                            if (viewMode !== "builder") return;
-                                            e.stopPropagation();
-                                            setSelected({
-                                              type: "spell",
-                                              id: spell.id,
-                                            });
-                                          }}
-                                          style={{
-                                            borderBottom:
-                                              viewMode === "clean"
-                                                ? isLast
-                                                  ? "none"
-                                                  : "1px dashed rgba(140, 45, 41, 0.18)"
-                                                : undefined,
-                                            border:
-                                              viewMode === "builder"
-                                                ? isSpellSelected
-                                                  ? "2px solid #2563eb"
-                                                  : "1px solid rgba(140, 45, 41, 0.22)"
-                                                : undefined,
-                                            backgroundColor:
-                                              viewMode === "builder"
-                                                ? isSpellSelected
-                                                  ? "rgba(37, 99, 235, 0.06)"
-                                                  : "#fbf9f5"
-                                                : "transparent",
-                                            opacity: isSpellDragging ? 0.25 : 1,
-                                          }}
-                                          className={`relative flex flex-col gap-1 transition-all duration-150 ${
-                                            viewMode === "builder"
-                                              ? "rounded-xl p-2.5 shadow-2xs"
-                                              : isLast
-                                                ? "pb-0"
-                                                : "pb-3"
-                                          }`}
-                                        >
-                                          {/* Elementor Widget Floating Bar */}
-                                          {viewMode === "builder" && (
-                                            <div className="mb-1 flex items-center justify-between gap-1 border-b border-[#8c2d29]/10 pb-1">
-                                              <div
-                                                onPointerDown={(e) =>
-                                                  startPointerDrag(
-                                                    e,
-                                                    "spell",
-                                                    spell.id,
-                                                    spell.title,
-                                                    spellRefs.current.get(
-                                                      spell.id
-                                                    ) ?? null,
-                                                    spell.priceTiers[0]
-                                                      ? formatPublicPriceLine(
-                                                          spell.priceTiers[0]
-                                                            .label,
-                                                          spell.priceTiers[0]
-                                                            .priceArs,
-                                                          spell.priceTiers[0]
-                                                            .priceUsd
-                                                        )
-                                                      : undefined,
-                                                    spell.categoryId
-                                                  )
-                                                }
-                                                style={{ color: "#8c2d29" }}
-                                                className="flex flex-1 cursor-grab items-center gap-1 text-[10.5px] font-bold active:cursor-grabbing"
-                                                title="Arrastrar hechizo para moverlo de lugar o a otra categoría"
-                                              >
-                                                <GripVertical className="h-3.5 w-3.5 shrink-0" />
-                                                <span>
-                                                  #{spIdx + 1} · Arrastrar
-                                                </span>
-                                              </div>
-
-                                              <div className="flex items-center gap-0.5">
-                                                <button
-                                                  type="button"
-                                                  disabled={spIdx === 0}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    stepSpellInCategory(
-                                                      spell.id,
-                                                      -1
-                                                    );
-                                                  }}
-                                                  style={{ color: "#5a2220" }}
-                                                  className="rounded p-1 hover:bg-black/5 disabled:opacity-25"
-                                                  title="Subir hechizo"
-                                                >
-                                                  <ArrowUp className="h-3 w-3" />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  disabled={
-                                                    spIdx ===
-                                                    publishedSpells.length - 1
-                                                  }
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    stepSpellInCategory(
-                                                      spell.id,
-                                                      1
-                                                    );
-                                                  }}
-                                                  style={{ color: "#5a2220" }}
-                                                  className="rounded p-1 hover:bg-black/5 disabled:opacity-25"
-                                                  title="Bajar hechizo"
-                                                >
-                                                  <ArrowDown className="h-3 w-3" />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelected({
-                                                      type: "spell",
-                                                      id: spell.id,
-                                                    });
-                                                    setMobileInspectorOpen(
-                                                      true
-                                                    );
-                                                  }}
-                                                  style={{ color: "#2563eb" }}
-                                                  className="rounded p-1 hover:bg-blue-500/10"
-                                                  title="Editar texto y precio"
-                                                >
-                                                  <Edit3 className="h-3 w-3" />
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    updateSpellDraft(spell.id, {
-                                                      isPublished: false,
-                                                    });
-                                                  }}
-                                                  style={{ color: "#8c2d29" }}
-                                                  className="rounded p-1 hover:bg-red-500/10"
-                                                  title="Quitar de la web (pasar a oculto)"
-                                                >
-                                                  <EyeOff className="h-3 w-3" />
-                                                </button>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Spell Content (Exact Carrd Typography) */}
-                                          <h4
-                                            style={{ color: "#8c2d29" }}
-                                            className="text-[15px] font-bold"
-                                          >
-                                            {spell.title}
-                                          </h4>
-
-                                          {spell.subtitleTag && (
-                                            <span
-                                              style={{ color: "#385766" }}
-                                              className="text-[12.5px] font-semibold italic"
-                                            >
-                                              {spell.subtitleTag}
-                                            </span>
-                                          )}
-
-                                          {desc && (
-                                            <p
-                                              style={{ color: "#5a2220" }}
-                                              className="text-[13.7px] leading-[1.48]"
-                                            >
-                                              {desc}
-                                            </p>
-                                          )}
-
-                                          {spell.priceTiers.length > 0 && (
-                                            <div className="mt-0.5 flex flex-col gap-0.5">
-                                              {spell.priceTiers.map(
-                                                (price, pIdx) => (
-                                                  <span
-                                                    key={`${spell.id}-p-${pIdx}`}
-                                                    style={{ color: "#4d1917" }}
-                                                    className="inline-flex flex-wrap items-center gap-1.5 text-[13.7px] font-bold italic"
-                                                  >
-                                                    <span>
-                                                      {formatPublicPriceLine(
-                                                        price.label,
-                                                        price.priceArs,
-                                                        price.priceUsd
-                                                      )}
-                                                    </span>
-                                                    {spell.isOffer &&
-                                                      pIdx === 0 && (
-                                                        <span
-                                                          style={{
-                                                            backgroundColor:
-                                                              "#8c2d29",
-                                                            color: "#fbf9f5",
-                                                          }}
-                                                          className="rounded-full px-2 py-0.5 text-[10.5px] font-bold not-italic tracking-wider"
-                                                        >
-                                                          {spell.offerLabel ||
-                                                            "¡OFERTA!"}
-                                                        </span>
-                                                      )}
-                                                  </span>
-                                                )
-                                              )}
-                                            </div>
-                                          )}
-                                        </article>
-                                      );
-                                    })}
-
-                                    {/* Quick "+ Agregar hechizo oculto de esta categoría" pill in builder mode */}
-                                    {viewMode === "builder" &&
-                                      hiddenSpells.length > 0 && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-1 pt-1">
-                                          <span
-                                            style={{ color: "#8c2d29" }}
-                                            className="text-[10.5px] font-semibold opacity-75"
-                                          >
-                                            Ocultos en esta categoría:
-                                          </span>
-                                          {hiddenSpells.map((hs) => (
-                                            <button
-                                              key={hs.id}
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                updateSpellDraft(hs.id, {
-                                                  isPublished: true,
-                                                });
-                                              }}
-                                              style={{
-                                                backgroundColor: "#e6cbc8",
-                                                color: "#8c2d29",
-                                              }}
-                                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold hover:opacity-90"
-                                            >
-                                              <Plus className="h-2.5 w-2.5" />
-                                              <span>{hs.title}</span>
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Carrd Footer Bar */}
-                    <div
-                      style={{
-                        backgroundColor: "#e6cbc8",
-                        color: "#8c2d29",
-                        borderTop: "1px solid rgba(140, 45, 41, 0.15)",
-                      }}
-                      className="flex items-center justify-between px-4 py-2.5 text-[13.5px] font-semibold"
-                    >
-                      <span>@eltarotde_luna</span>
-                      <div className="flex items-center gap-2">
-                        <span
-                          style={{ backgroundColor: "#f7f3eb" }}
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-xs shadow-xs"
-                        >
-                          𝕏
-                        </span>
-                        <span
-                          style={{ backgroundColor: "#f7f3eb" }}
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-xs shadow-xs"
-                        >
-                          IG
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* =========================================================
-              RIGHT SIDEBAR (5 cols on Desktop): ELEMENTOR INSPECTOR + WIDGET DRAWER
-             ========================================================= */}
-          <div className="space-y-4 lg:sticky lg:top-6 lg:col-span-5">
-            {/* 1. Elementor Property Inspector */}
-            <section className="rounded-[20px] border border-border-subtle bg-surface p-4 shadow-xs">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Edit3
-                    className="h-4 w-4 text-accent-text"
-                    aria-hidden="true"
-                  />
-                  <h2 className="section-heading text-sm font-semibold text-ink">
-                    Inspector de Elemento
-                  </h2>
-                </div>
-                {selected && (
-                  <button
-                    type="button"
-                    onClick={() => setSelected(null)}
-                    className="text-xs text-ink-dim hover:text-ink"
-                  >
-                    Cerrar
-                  </button>
-                )}
-              </div>
-
-              {renderInspectorContent()}
-            </section>
-
-            {/* 2. Elementor Widget Drawer: Private Spells ready to drag or click into the page */}
-            <section className="rounded-[20px] border border-border-subtle bg-surface p-4 shadow-xs">
-              <div className="mb-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-info" aria-hidden="true" />
-                  <h2 className="section-heading text-sm font-semibold text-ink">
-                    Bandeja de Hechizos Ocultos ({privateSpells.length})
-                  </h2>
-                </div>
-              </div>
-              <p className="mb-3 text-xs text-ink-muted">
-                Arrastralos desde{" "}
-                <GripVertical className="inline h-3.5 w-3.5 text-accent-text" />{" "}
-                hacia cualquier categoría de la vista móvil o tocá{" "}
-                <strong>+ Publicar</strong>.
-              </p>
-
-              {privateSpells.length === 0 ? (
-                <div className="rounded-xl border border-border-subtle bg-canvas p-4 text-center text-xs text-ink-dim">
-                  ¡Todos tus hechizos están publicados en la página!
-                </div>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handlePublish}
+              className="apple-press inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
               ) : (
-                <div className="scroll-contain max-h-[340px] space-y-2 overflow-y-auto pr-1">
-                  {privateSpells.map((sp) => {
-                    const catName =
-                      draftCategories.find((c) => c.id === sp.categoryId)
-                        ?.name ?? "Sin categoría";
-
-                    return (
-                      <div
-                        key={sp.id}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas p-2.5 transition hover:border-border-strong"
-                      >
-                        <div
-                          onPointerDown={(e) =>
-                            startPointerDrag(
-                              e,
-                              "spell",
-                              sp.id,
-                              sp.title,
-                              e.currentTarget.parentElement,
-                              catName,
-                              sp.categoryId
-                            )
-                          }
-                          className="flex min-w-0 flex-1 cursor-grab items-center gap-2 active:cursor-grabbing"
-                          title="Arrastrar hacia la vista móvil"
-                        >
-                          <GripVertical className="h-4 w-4 shrink-0 text-ink-dim" />
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold text-ink">
-                              {sp.title}
-                            </p>
-                            <p className="truncate text-[11px] text-ink-muted">
-                              {catName}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <select
-                            aria-label={`Categoría para publicar ${sp.title}`}
-                            value={
-                              sp.categoryId ?? draftCategories[0]?.id ?? ""
-                            }
-                            onChange={(e) =>
-                              updateSpellDraft(sp.id, {
-                                categoryId: e.target.value || null,
-                                isPublished: false,
-                              })
-                            }
-                            className="h-7 max-w-[115px] truncate rounded-lg border border-border-subtle bg-surface px-1.5 text-[11px] text-ink outline-none"
-                          >
-                            {draftCategories.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const targetCat =
-                                sp.categoryId ?? draftCategories[0]?.id ?? "";
-                              if (targetCat) {
-                                const countInTarget = draftSpells.filter(
-                                  (s) =>
-                                    s.categoryId === targetCat && s.isPublished
-                                ).length;
-                                moveSpellToPosition(
-                                  sp.id,
-                                  targetCat,
-                                  countInTarget
-                                );
-                              } else {
-                                updateSpellDraft(sp.id, { isPublished: true });
-                              }
-                            }}
-                            className="apple-press inline-flex h-7 items-center gap-1 rounded-lg bg-info-soft px-2.5 text-[11px] font-semibold text-info hover:bg-info hover:text-white"
-                          >
-                            <Plus className="h-3 w-3" aria-hidden="true" />
-                            <span>Publicar</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <UploadCloud className="h-3.5 w-3.5" aria-hidden="true" />
               )}
-            </section>
+              <span>
+                {saving ? "Publicando..." : "Guardar y Publicar en web"}
+              </span>
+            </button>
           </div>
         </div>
       )}
 
       {/* =========================================================
-          FLOATING 1:1 DRAG GHOST CARD (FOLLOWS FINGER/MOUSE)
+          FLOATING 1:1 DRAG GHOST (FOLLOWS FINGER/MOUSE)
          ========================================================= */}
       {dragState && (
         <div
@@ -2002,7 +1185,7 @@ export default function ElementorWebBuilderPage() {
               dragState.currentX - dragState.grabOffsetX
             }px, ${
               dragState.currentY - dragState.grabOffsetY
-            }px, 0) scale(1.03)`,
+            }px, 0) scale(1.02)`,
             zIndex: 9999,
             pointerEvents: "none",
             backgroundColor:
@@ -2011,7 +1194,7 @@ export default function ElementorWebBuilderPage() {
             border:
               dragState.kind === "category"
                 ? "2px solid #fbf9f5"
-                : "2px solid #2563eb",
+                : "2px solid #8c2d29",
           }}
           className="flex items-center justify-between gap-2 rounded-2xl px-3.5 py-2.5 shadow-2xl"
         >
@@ -2027,85 +1210,204 @@ export default function ElementorWebBuilderPage() {
             </div>
           </div>
           <span className="shrink-0 rounded-md bg-black/15 px-2 py-0.5 text-[10px] font-bold uppercase">
-            {dragState.kind === "category" ? "Sección" : "Hechizo"}
+            {dragState.kind === "category" ? "Categoría" : "Hechizo"}
           </span>
         </div>
       )}
 
-      {/* Mobile Inspector Bottom Sheet */}
+      {/* =========================================================
+          BOTTOM SHEET 1: ELEMENTOR INSPECTOR (TAP ANY CATEGORY OR SPELL)
+         ========================================================= */}
       <IosBottomSheet
-        open={mobileInspectorOpen && !!selected}
-        onClose={() => setMobileInspectorOpen(false)}
-        ariaLabelledBy="mobile-inspector-title"
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        ariaLabelledBy="web-inspector-title"
+        maxWidthClass="max-w-md"
       >
-        <div className="pb-sheet-safe px-4 pt-2 pb-5">
-          <div className="mb-2 flex items-center justify-between">
-            <h2
-              id="mobile-inspector-title"
-              className="section-heading text-base font-semibold text-ink"
-            >
-              Editar elemento
-            </h2>
-            <button
-              type="button"
-              onClick={() => setMobileInspectorOpen(false)}
-              className="apple-press flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          {renderInspectorContent()}
-        </div>
-      </IosBottomSheet>
-
-      {/* Mobile Hidden Spells Drawer Bottom Sheet */}
-      <IosBottomSheet
-        open={mobileDrawerOpen}
-        onClose={() => setMobileDrawerOpen(false)}
-        ariaLabelledBy="mobile-drawer-title"
-      >
-        <div className="pb-sheet-safe flex max-h-[78dvh] flex-col px-4 pt-2 pb-5">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2
-                id="mobile-drawer-title"
-                className="section-heading text-base font-semibold text-ink"
-              >
-                Hechizos Ocultos ({privateSpells.length})
-              </h2>
-              <p className="text-xs text-ink-muted">
-                Elegí en qué categoría publicarlos con un toque
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setMobileDrawerOpen(false)}
-              className="apple-press flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="scroll-contain flex-1 space-y-2 overflow-y-auto">
-            {privateSpells.map((sp) => (
-              <div
-                key={sp.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas p-2.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-ink">
-                    {sp.title}
+        <div className="pb-sheet-safe scroll-contain max-h-[82dvh] overflow-y-auto px-4 pt-1.5 pb-5 sm:p-5">
+          {selectedCategory && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-accent-text">
+                    Editar Categoría
                   </p>
+                  <h2
+                    id="web-inspector-title"
+                    className="section-heading truncate text-lg font-semibold text-ink"
+                  >
+                    {selectedCategory.name}
+                  </h2>
                 </div>
-                <select
-                  value={sp.categoryId ?? draftCategories[0]?.id ?? ""}
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idx = draftCategories.findIndex(
+                        (c) => c.id === selectedCategory.id
+                      );
+                      moveCategoryByIndex(idx, idx - 1);
+                    }}
+                    aria-label="Subir categoría"
+                    className="apple-press flex h-9 w-9 items-center justify-center rounded-xl border border-border-subtle bg-canvas text-ink-muted hover:text-ink"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const idx = draftCategories.findIndex(
+                        (c) => c.id === selectedCategory.id
+                      );
+                      moveCategoryByIndex(idx, idx + 1);
+                    }}
+                    aria-label="Bajar categoría"
+                    className="apple-press flex h-9 w-9 items-center justify-center rounded-xl border border-border-subtle bg-canvas text-ink-muted hover:text-ink"
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(null)}
+                    aria-label="Cerrar"
+                    className="apple-press flex h-9 w-9 items-center justify-center rounded-xl text-ink-muted"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                  Nombre de la categoría
+                </label>
+                <input
+                  type="text"
+                  value={selectedCategory.name}
                   onChange={(e) =>
-                    updateSpellDraft(sp.id, {
-                      categoryId: e.target.value || null,
-                      isPublished: false,
+                    updateCategoryField(selectedCategory.id, {
+                      name: e.target.value,
                     })
                   }
-                  className="h-8 max-w-[130px] truncate rounded-lg border border-border-subtle bg-surface px-2 text-xs text-ink"
+                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2.5 text-sm font-semibold text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                  Texto introductorio en la web (opcional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={selectedCategory.publicIntro ?? ""}
+                  onChange={(e) =>
+                    updateCategoryField(selectedCategory.id, {
+                      publicIntro: e.target.value || null,
+                    })
+                  }
+                  placeholder="Aparece debajo del título subrayado..."
+                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(selectedCategory)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger hover:underline"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Eliminar categoría</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="apple-press rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-on-accent"
+                >
+                  Listo
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectedSpell && (
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-info">
+                    Editar Hechizo en Web
+                  </p>
+                  <h2
+                    id="web-inspector-title"
+                    className="section-heading truncate text-lg font-semibold text-ink"
+                  >
+                    {selectedSpell.title}
+                  </h2>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => stepSpellInCategory(selectedSpell.id, -1)}
+                    aria-label="Subir posición"
+                    className="apple-press flex h-9 w-9 items-center justify-center rounded-xl border border-border-subtle bg-canvas text-ink-muted hover:text-ink"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => stepSpellInCategory(selectedSpell.id, 1)}
+                    aria-label="Bajar posición"
+                    className="apple-press flex h-9 w-9 items-center justify-center rounded-xl border border-border-subtle bg-canvas text-ink-muted hover:text-ink"
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(null)}
+                    aria-label="Cerrar"
+                    className="apple-press flex h-9 w-9 items-center justify-center rounded-xl text-ink-muted"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateSpellDraft(selectedSpell.id, {
+                      isPublished: !selectedSpell.isPublished,
+                    })
+                  }
+                  className={`apple-press flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold ${
+                    selectedSpell.isPublished
+                      ? "border-info/45 bg-info-soft text-info"
+                      : "border-border-subtle bg-canvas text-ink-muted"
+                  }`}
+                >
+                  {selectedSpell.isPublished ? (
+                    <>
+                      <Globe className="h-3.5 w-3.5" />
+                      <span>Público</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff className="h-3.5 w-3.5" />
+                      <span>Oculto</span>
+                    </>
+                  )}
+                </button>
+
+                <select
+                  aria-label="Categoría"
+                  value={selectedSpell.categoryId ?? ""}
+                  onChange={(e) =>
+                    updateSpellDraft(selectedSpell.id, {
+                      categoryId: e.target.value || null,
+                    })
+                  }
+                  className="min-h-10 rounded-xl border border-border-subtle bg-canvas px-2.5 text-xs font-semibold text-ink outline-none focus:border-accent"
                 >
                   {draftCategories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -2113,25 +1415,372 @@ export default function ElementorWebBuilderPage() {
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const targetCat =
-                      sp.categoryId ?? draftCategories[0]?.id ?? "";
-                    if (targetCat) {
-                      const countInTarget = draftSpells.filter(
-                        (s) => s.categoryId === targetCat && s.isPublished
-                      ).length;
-                      moveSpellToPosition(sp.id, targetCat, countInTarget);
-                    }
-                  }}
-                  className="apple-press inline-flex h-8 items-center gap-1 rounded-lg bg-accent px-2.5 text-xs font-semibold text-on-accent"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Sumar</span>
-                </button>
               </div>
-            ))}
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                  Título público
+                </label>
+                <input
+                  type="text"
+                  value={selectedSpell.title}
+                  onChange={(e) =>
+                    updateSpellDraft(selectedSpell.id, {
+                      title: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                  Subtítulo en cursiva (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={selectedSpell.subtitleTag ?? ""}
+                  onChange={(e) =>
+                    updateSpellDraft(selectedSpell.id, {
+                      subtitleTag: e.target.value || null,
+                    })
+                  }
+                  placeholder="Ej. Limpieza energética profunda"
+                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                  Descripción para clientas
+                </label>
+                <textarea
+                  rows={3}
+                  value={
+                    selectedSpell.publicDescription ??
+                    selectedSpell.purpose ??
+                    ""
+                  }
+                  onChange={(e) =>
+                    updateSpellDraft(selectedSpell.id, {
+                      publicDescription: e.target.value || null,
+                    })
+                  }
+                  className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              {/* Price Tiers */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink-muted">
+                    Precios (ARS / USD)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateSpellDraft(selectedSpell.id, {
+                        priceTiers: [
+                          ...selectedSpell.priceTiers,
+                          { label: "Potenciado", priceArs: 45000, priceUsd: 48 },
+                        ],
+                      })
+                    }
+                    className="apple-press inline-flex items-center gap-1 rounded-lg border border-border-subtle bg-canvas px-2 py-1 text-[11px] font-semibold text-accent-text"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Nivel</span>
+                  </button>
+                </div>
+
+                {selectedSpell.priceTiers.map((tier, tIdx) => (
+                  <div
+                    key={tIdx}
+                    className="grid grid-cols-12 items-center gap-1.5"
+                  >
+                    <input
+                      type="text"
+                      value={tier.label}
+                      onChange={(e) =>
+                        updateSpellDraft(selectedSpell.id, {
+                          priceTiers: selectedSpell.priceTiers.map((it, i) =>
+                            i === tIdx ? { ...it, label: e.target.value } : it
+                          ),
+                        })
+                      }
+                      placeholder="Etiqueta"
+                      className="col-span-4 rounded-xl border border-border-subtle bg-canvas px-2.5 py-2 text-xs text-ink outline-none focus:border-accent"
+                    />
+                    <div className="col-span-4 flex items-center rounded-xl border border-border-subtle bg-canvas px-2 py-2">
+                      <span className="mr-0.5 text-xs text-ink-dim">$</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        value={tier.priceArs}
+                        onChange={(e) =>
+                          updateSpellDraft(selectedSpell.id, {
+                            priceTiers: selectedSpell.priceTiers.map((it, i) =>
+                              i === tIdx
+                                ? { ...it, priceArs: Number(e.target.value || 0) }
+                                : it
+                            ),
+                          })
+                        }
+                        className="w-full bg-transparent tabular-nums text-xs font-semibold text-ink outline-none"
+                      />
+                    </div>
+                    <div className="col-span-3 flex items-center rounded-xl border border-border-subtle bg-canvas px-2 py-2">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        value={tier.priceUsd}
+                        onChange={(e) =>
+                          updateSpellDraft(selectedSpell.id, {
+                            priceTiers: selectedSpell.priceTiers.map((it, i) =>
+                              i === tIdx
+                                ? { ...it, priceUsd: Number(e.target.value || 0) }
+                                : it
+                            ),
+                          })
+                        }
+                        className="w-full bg-transparent tabular-nums text-xs font-semibold text-ink outline-none"
+                      />
+                      <span className="text-[10px] text-ink-dim">USD</span>
+                    </div>
+                    <div className="col-span-1 flex justify-end">
+                      {selectedSpell.priceTiers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateSpellDraft(selectedSpell.id, {
+                              priceTiers: selectedSpell.priceTiers.filter(
+                                (_, i) => i !== tIdx
+                              ),
+                            })
+                          }
+                          aria-label="Quitar precio"
+                          className="text-ink-dim hover:text-danger"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Offer Badge */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas p-3">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-ink">
+                  <input
+                    type="checkbox"
+                    checked={selectedSpell.isOffer}
+                    onChange={(e) =>
+                      updateSpellDraft(selectedSpell.id, {
+                        isOffer: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 accent-[var(--accent-solid)]"
+                  />
+                  <Tag className="h-3.5 w-3.5 text-accent-text" />
+                  <span>Cartel de Oferta</span>
+                </label>
+
+                {selectedSpell.isOffer && (
+                  <input
+                    type="text"
+                    value={selectedSpell.offerLabel ?? "¡OFERTA!"}
+                    onChange={(e) =>
+                      updateSpellDraft(selectedSpell.id, {
+                        offerLabel: e.target.value,
+                      })
+                    }
+                    className="w-28 rounded-lg border border-border-subtle bg-surface px-2.5 py-1 text-xs font-bold text-accent-text outline-none focus:border-accent"
+                  />
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="apple-press w-full rounded-xl bg-accent py-2.5 text-sm font-semibold text-on-accent"
+              >
+                Aplicar al borrador
+              </button>
+            </div>
+          )}
+        </div>
+      </IosBottomSheet>
+
+      {/* =========================================================
+          BOTTOM SHEET 2: HIDDEN SPELLS DRAWER (+ PUBLICAR EN CATEGORÍA)
+         ========================================================= */}
+      <IosBottomSheet
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        ariaLabelledBy="hidden-spells-title"
+        maxWidthClass="max-w-md"
+      >
+        <div className="pb-sheet-safe flex max-h-[80dvh] flex-col px-4 pt-1.5 pb-5 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <h2
+                id="hidden-spells-title"
+                className="section-heading text-lg font-semibold text-ink"
+              >
+                Hechizos Ocultos ({privateSpells.length})
+              </h2>
+              <p className="text-xs text-ink-muted">
+                Sumalos a la web eligiendo su categoría
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(false)}
+              aria-label="Cerrar"
+              className="apple-press flex h-9 w-9 items-center justify-center rounded-xl text-ink-muted"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {privateSpells.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink-muted">
+              ¡Todos tus hechizos ya están publicados en la web!
+            </p>
+          ) : (
+            <div className="scroll-contain flex-1 space-y-2 overflow-y-auto">
+              {privateSpells.map((sp) => (
+                <div
+                  key={sp.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas p-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-ink">
+                      {sp.title}
+                    </p>
+                  </div>
+                  <select
+                    aria-label={`Categoría para ${sp.title}`}
+                    value={sp.categoryId ?? draftCategories[0]?.id ?? ""}
+                    onChange={(e) =>
+                      updateSpellDraft(sp.id, {
+                        categoryId: e.target.value || null,
+                        isPublished: false,
+                      })
+                    }
+                    className="h-8 max-w-[125px] truncate rounded-lg border border-border-subtle bg-surface px-2 text-xs text-ink"
+                  >
+                    {draftCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetCat =
+                        sp.categoryId ?? draftCategories[0]?.id ?? "";
+                      if (targetCat) {
+                        const count = draftSpells.filter(
+                          (s) => s.categoryId === targetCat && s.isPublished
+                        ).length;
+                        moveSpellToPosition(sp.id, targetCat, count);
+                      } else {
+                        updateSpellDraft(sp.id, { isPublished: true });
+                      }
+                      toast.success(`"${sp.title}" sumado al borrador web.`);
+                    }}
+                    className="apple-press inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-accent px-2.5 text-xs font-semibold text-on-accent"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Sumar</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </IosBottomSheet>
+
+      {/* =========================================================
+          BOTTOM SHEET 3: CREATE NEW CATEGORY
+         ========================================================= */}
+      <IosBottomSheet
+        open={newCatOpen}
+        onClose={() => setNewCatOpen(false)}
+        ariaLabelledBy="new-cat-title"
+        maxWidthClass="max-w-md"
+      >
+        <div className="pb-sheet-safe px-4 pt-1.5 pb-5 sm:p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2
+              id="new-cat-title"
+              className="section-heading text-lg font-semibold text-ink"
+            >
+              Nueva Categoría
+            </h2>
+            <button
+              type="button"
+              onClick={() => setNewCatOpen(false)}
+              aria-label="Cerrar"
+              className="apple-press flex h-9 w-9 items-center justify-center rounded-xl text-ink-muted"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                Nombre *
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newCatName.trim()) {
+                    e.preventDefault();
+                    handleCreateCategory();
+                  }
+                }}
+                placeholder="Ej. Hechizos de Protección..."
+                className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                Texto introductorio en la web (opcional)
+              </label>
+              <textarea
+                rows={2}
+                value={newCatIntro}
+                onChange={(e) => setNewCatIntro(e.target.value)}
+                placeholder="Subtítulo o aclaración debajo del nombre..."
+                className="w-full rounded-xl border border-border-subtle bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+              />
+            </div>
+
+            <button
+              type="button"
+              disabled={!newCatName.trim() || createCatMut.isPending}
+              onClick={handleCreateCategory}
+              className="apple-press flex w-full items-center justify-center gap-1.5 rounded-xl bg-accent py-2.5 text-sm font-semibold text-on-accent disabled:opacity-45"
+            >
+              {createCatMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              <span>Crear categoría</span>
+            </button>
           </div>
         </div>
       </IosBottomSheet>
