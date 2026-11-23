@@ -150,11 +150,119 @@ export default function WebBuilderPage() {
   const [newCatName, setNewCatName] = useState("");
   const [newCatIntro, setNewCatIntro] = useState("");
 
-  // 1:1 Pointer Drag State
+  // 1:1 Pointer Drag State (Elementor reorder)
   const [dragState, setDragState] = useState<ActiveDragState | null>(null);
   const phoneScreenRef = useRef<HTMLDivElement | null>(null);
   const categoryRefs = useRef<Map<string, HTMLElement>>(new Map());
   const spellRefs = useRef<Map<string, HTMLElement>>(new Map());
+
+  // 1:1 Mouse Grab-to-Scroll with momentum inside the Desktop iPhone Mockup
+  const [isScreenPanning, setIsScreenPanning] = useState(false);
+  const suppressClickRef = useRef(false);
+  const momentumRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (momentumRafRef.current !== null) {
+        cancelAnimationFrame(momentumRafRef.current);
+      }
+    };
+  }, []);
+
+  function handleMockupScreenPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    // Let native touch physics handle real touch screens; emulate finger-swipe for mouse on PC
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        '[data-drag-handle="true"], input, textarea, select, [data-no-pan="true"]'
+      )
+    ) {
+      return;
+    }
+
+    const screenEl = phoneScreenRef.current;
+    const scrollContainer: "mockup" | "window" =
+      screenEl && screenEl.scrollHeight > screenEl.clientHeight + 4
+        ? "mockup"
+        : "window";
+
+    // Interrupt any ongoing momentum glide immediately (Apple interruptibility)
+    if (momentumRafRef.current !== null) {
+      cancelAnimationFrame(momentumRafRef.current);
+      momentumRafRef.current = null;
+    }
+
+    const startY = e.clientY;
+    const startScrollTop =
+      scrollContainer === "mockup" && screenEl
+        ? screenEl.scrollTop
+        : window.scrollY;
+    let lastY = e.clientY;
+    let lastTime = performance.now();
+    let velocity = 0; // px per ms
+    let didPan = false;
+
+    function onMove(ev: PointerEvent) {
+      const dy = ev.clientY - startY;
+      if (!didPan && Math.abs(dy) > 5) {
+        didPan = true;
+        setIsScreenPanning(true);
+      }
+      if (!didPan) return;
+
+      if (scrollContainer === "mockup" && screenEl) {
+        screenEl.scrollTop = startScrollTop - dy;
+      } else {
+        window.scrollTo({ top: Math.max(0, startScrollTop - dy) });
+      }
+
+      const now = performance.now();
+      const dt = Math.max(1, now - lastTime);
+      const instantV = (lastY - ev.clientY) / dt; // positive = scroll down
+      velocity = velocity * 0.4 + instantV * 0.6;
+      lastY = ev.clientY;
+      lastTime = now;
+    }
+
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+
+      if (didPan) {
+        setIsScreenPanning(false);
+        suppressClickRef.current = true;
+        window.setTimeout(() => {
+          suppressClickRef.current = false;
+        }, 60);
+
+        // Smooth Apple-style momentum glide
+        let v = velocity * 16; // px per 16ms frame
+        const step = () => {
+          if (Math.abs(v) < 0.35) {
+            momentumRafRef.current = null;
+            return;
+          }
+          if (scrollContainer === "mockup" && screenEl) {
+            screenEl.scrollTop += v;
+          } else {
+            window.scrollBy({ top: v });
+          }
+          v *= 0.93;
+          momentumRafRef.current = requestAnimationFrame(step);
+        };
+        if (Math.abs(v) > 0.8) {
+          momentumRafRef.current = requestAnimationFrame(step);
+        }
+      }
+    }
+
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
 
   useEffect(() => {
     if (!data || isDirty) return;
@@ -778,11 +886,16 @@ export default function WebBuilderPage() {
               {/* Scrollable Screen Inside Phone Mockup on Desktop / Natural Flow on Mobile */}
               <div
                 ref={phoneScreenRef}
+                onPointerDown={handleMockupScreenPointerDown}
                 style={{
                   background:
                     "radial-gradient(circle at 50% 0%, #442725 0%, #1c1313 100%)",
+                  touchAction: "pan-y",
+                  WebkitOverflowScrolling: "touch",
                 }}
-                className="scroll-contain w-full overflow-hidden rounded-[24px] p-2.5 shadow-md sm:p-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto md:rounded-none md:p-3 md:shadow-none"
+                className={`scroll-contain w-full overflow-hidden rounded-[24px] p-2.5 shadow-md select-none sm:p-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto md:rounded-none md:p-3 md:shadow-none ${
+                  isScreenPanning ? "md:cursor-grabbing" : "md:cursor-grab"
+                }`}
               >
                 {/* Compact Carrd Hero (@eltarotde_luna) */}
                 <div
@@ -883,6 +996,7 @@ export default function WebBuilderPage() {
                                   {mode === "edit" && (
                                     <button
                                       type="button"
+                                      data-drag-handle="true"
                                       onPointerDown={(e) =>
                                         startPointerDrag(
                                           e,
@@ -907,15 +1021,33 @@ export default function WebBuilderPage() {
                                     </button>
                                   )}
 
-                                  <button
-                                    type="button"
-                                    disabled={mode === "preview"}
-                                    onClick={() =>
+                                  <div
+                                    role={mode === "edit" ? "button" : undefined}
+                                    tabIndex={mode === "edit" ? 0 : undefined}
+                                    onClick={() => {
+                                      if (
+                                        mode === "preview" ||
+                                        suppressClickRef.current
+                                      )
+                                        return;
                                       setSelected({
                                         type: "category",
                                         id: category.id,
-                                      })
-                                    }
+                                      });
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (
+                                        mode === "edit" &&
+                                        (e.key === "Enter" || e.key === " ")
+                                      ) {
+                                        e.preventDefault();
+                                        setSelected({
+                                          type: "category",
+                                          id: category.id,
+                                        });
+                                      }
+                                    }}
+                                    style={{ touchAction: "pan-y" }}
                                     className="min-w-0 flex-1 text-left"
                                   >
                                     <h3
@@ -924,18 +1056,20 @@ export default function WebBuilderPage() {
                                     >
                                       {category.name}
                                     </h3>
-                                  </button>
+                                  </div>
                                 </div>
 
                                 {mode === "edit" && (
                                   <button
                                     type="button"
-                                    onClick={() =>
+                                    data-no-pan="true"
+                                    onClick={() => {
+                                      if (suppressClickRef.current) return;
                                       setSelected({
                                         type: "category",
                                         id: category.id,
-                                      })
-                                    }
+                                      });
+                                    }}
                                     aria-label={`Editar ${category.name}`}
                                     style={{ color: "#8c2d29" }}
                                     className="hit-44 flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-[#8c2d29]/10 hover:opacity-100"
@@ -1020,6 +1154,7 @@ export default function WebBuilderPage() {
                                         {mode === "edit" && (
                                           <button
                                             type="button"
+                                            data-drag-handle="true"
                                             onPointerDown={(e) =>
                                               startPointerDrag(
                                                 e,
@@ -1052,15 +1187,40 @@ export default function WebBuilderPage() {
                                           </button>
                                         )}
 
-                                        <button
-                                          type="button"
-                                          disabled={mode === "preview"}
-                                          onClick={() =>
+                                        <div
+                                          role={
+                                            mode === "edit"
+                                              ? "button"
+                                              : undefined
+                                          }
+                                          tabIndex={
+                                            mode === "edit" ? 0 : undefined
+                                          }
+                                          onClick={() => {
+                                            if (
+                                              mode === "preview" ||
+                                              suppressClickRef.current
+                                            )
+                                              return;
                                             setSelected({
                                               type: "spell",
                                               id: spell.id,
-                                            })
-                                          }
+                                            });
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (
+                                              mode === "edit" &&
+                                              (e.key === "Enter" ||
+                                                e.key === " ")
+                                            ) {
+                                              e.preventDefault();
+                                              setSelected({
+                                                type: "spell",
+                                                id: spell.id,
+                                              });
+                                            }
+                                          }}
+                                          style={{ touchAction: "pan-y" }}
                                           className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
                                         >
                                           <h4
@@ -1123,16 +1283,19 @@ export default function WebBuilderPage() {
                                               )}
                                             </div>
                                           )}
-                                        </button>
+                                        </div>
 
                                         {mode === "edit" && (
                                           <button
                                             type="button"
-                                            onClick={() =>
+                                            data-no-pan="true"
+                                            onClick={() => {
+                                              if (suppressClickRef.current)
+                                                return;
                                               updateSpellDraft(spell.id, {
                                                 isPublished: false,
-                                              })
-                                            }
+                                              });
+                                            }}
                                             aria-label={`Ocultar ${spell.title} de la web`}
                                             title="Ocultar de la web"
                                             style={{ color: "#8c2d29" }}
