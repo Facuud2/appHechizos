@@ -194,6 +194,9 @@ export default function WebBuilderPage() {
       momentumRafRef.current = null;
     }
 
+    // Prevent browser native drag/selection so mouse drag-to-scroll tracks 1:1 immediately
+    e.preventDefault();
+
     const startY = e.clientY;
     const startScrollTop =
       scrollContainer === "mockup" && screenEl
@@ -481,6 +484,12 @@ export default function WebBuilderPage() {
   ) {
     e.stopPropagation();
     e.preventDefault();
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unsupported
+    }
 
     const rect = containerEl?.getBoundingClientRect() ?? {
       left: e.clientX - 140,
@@ -887,13 +896,13 @@ export default function WebBuilderPage() {
               <div
                 ref={phoneScreenRef}
                 onPointerDown={handleMockupScreenPointerDown}
+                onDragStart={(e) => e.preventDefault()}
                 style={{
                   background:
                     "radial-gradient(circle at 50% 0%, #442725 0%, #1c1313 100%)",
                   touchAction: "pan-y",
-                  WebkitOverflowScrolling: "touch",
                 }}
-                className={`scroll-contain w-full overflow-hidden rounded-[24px] p-2.5 shadow-md select-none sm:p-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto md:rounded-none md:p-3 md:shadow-none ${
+                className={`w-full rounded-[24px] p-2.5 shadow-md select-none sm:p-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:rounded-none md:p-3 md:shadow-none ${
                   isScreenPanning ? "md:cursor-grabbing" : "md:cursor-grab"
                 }`}
               >
