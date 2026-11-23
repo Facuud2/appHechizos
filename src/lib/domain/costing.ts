@@ -1,4 +1,4 @@
-import type { UnitType } from "@/db/schema";
+import { isPresenceUnit, type UnitType } from "@/db/schema";
 
 export interface CostableRecipeItem {
   ingredientName: string;
@@ -27,12 +27,19 @@ export function calculateVariationCost(
   const missingCostIngredients: string[] = [];
 
   for (const item of items) {
+    const isPresence =
+      isPresenceUnit(item.ingredientUnitType) || isPresenceUnit(item.unit);
+
     if (item.unitCostArs === null && item.unitCostUsd === null) {
-      missingCostIngredients.push(item.ingredientName);
+      // Reusable presence items (crystals, stones, tarot/spanish decks, tools) are not consumed per ritual,
+      // so they should not trigger a missing consumable cost warning.
+      if (!isPresence) {
+        missingCostIngredients.push(item.ingredientName);
+      }
       continue;
     }
 
-    const qty = item.quantity ?? 1;
+    const qty = isPresence ? 1 : (item.quantity ?? 1);
     if (item.unitCostArs !== null) {
       totalCostArs += qty * item.unitCostArs;
     }

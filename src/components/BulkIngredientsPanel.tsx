@@ -17,7 +17,7 @@ import {
 } from "@/lib/domain/bulk-parser";
 import { formatArs } from "@/lib/format";
 import { UNIT_LABELS, type IngredientItem } from "@/types/app";
-import type { UnitType } from "@/db/schema";
+import { isNonCountableUnit, isPresenceUnit, type UnitType } from "@/db/schema";
 
 const GROUP_OPTIONS = [
   "Hierbas",
@@ -25,11 +25,13 @@ const GROUP_OPTIONS = [
   "Insumos",
   "Aceites",
   "Cristales",
+  "Cartas",
   "Inciensos",
   "Otros",
 ];
 
 const UNIT_SELECT_OPTIONS: { value: UnitType; label: string }[] = [
+  { value: "presence", label: "existencia (sí/no)" },
   { value: "g", label: "g" },
   { value: "ml", label: "ml" },
   { value: "unit", label: "u." },
@@ -42,7 +44,8 @@ const UNIT_SELECT_OPTIONS: { value: UnitType; label: string }[] = [
 const EXAMPLE_INGREDIENTS_TEXT = `Romero 50g $500
 Vela roja 10u $850
 Miel pura 250ml $1800
-Cuarzo rosa 3u $1500
+Cuarzo rosa
+Mazo de Tarot Rider Waite
 Ruda seca 40g $450
 Agua Florida 100ml $2200`;
 
@@ -142,8 +145,9 @@ export function BulkIngredientsPanel({
         name: item.name.trim(),
         groupTag: item.groupTag,
         unitType: item.unitType,
-        stockQty:
-          item.unitType === "qualitative" ? null : (item.stockQty ?? 0),
+        stockQty: isNonCountableUnit(item.unitType)
+          ? null
+          : (item.stockQty ?? 0),
         stockLevel: item.stockLevel,
         unitCostArs: item.unitCostArs,
         duplicateAction: item.duplicateAction,
@@ -320,11 +324,15 @@ export function BulkIngredientsPanel({
                         {isDup ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-info-soft px-2 py-0.5 text-[11px] font-semibold text-info">
                             <RefreshCw className="h-3 w-3" aria-hidden="true" />
-                            {item.duplicateAction === "add_stock"
-                              ? `Existe (${item.existingStockQty ?? 0} → ${resultingStock ?? 0} ${UNIT_LABELS[item.unitType]})`
-                              : item.duplicateAction === "overwrite"
-                                ? `Reemplaza (${item.existingStockQty ?? 0} → ${item.stockQty ?? 0})`
-                                : "Se omitirá"}
+                            {isPresenceUnit(item.unitType)
+                              ? item.duplicateAction === "skip"
+                                ? "Se omitirá"
+                                : "Existe (se mantiene en alacena)"
+                              : item.duplicateAction === "add_stock"
+                                ? `Existe (${item.existingStockQty ?? 0} → ${resultingStock ?? 0} ${UNIT_LABELS[item.unitType]})`
+                                : item.duplicateAction === "overwrite"
+                                  ? `Reemplaza (${item.existingStockQty ?? 0} → ${item.stockQty ?? 0})`
+                                  : "Se omitirá"}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-md bg-ready-soft px-2 py-0.5 text-[11px] font-semibold text-ready">
@@ -372,53 +380,83 @@ export function BulkIngredientsPanel({
                       </select>
                     </div>
 
-                    {/* Quantity */}
+                    {/* Quantity or Presence */}
                     <div>
                       <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-dim">
-                        {isDup && item.duplicateAction === "add_stock"
-                          ? "Cantidad a sumar"
-                          : "Stock"}
+                        {isPresenceUnit(item.unitType)
+                          ? "Existencia"
+                          : isDup && item.duplicateAction === "add_stock"
+                            ? "Cantidad a sumar"
+                            : "Stock"}
                       </label>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        disabled={item.unitType === "qualitative"}
-                        value={
-                          item.unitType === "qualitative"
-                            ? ""
-                            : (item.stockQty ?? "")
-                        }
-                        placeholder={
-                          item.unitType === "qualitative" ? "A ojo" : "0"
-                        }
-                        onChange={(e) => {
-                          const val =
-                            e.target.value === ""
-                              ? null
-                              : Number(e.target.value);
-                          updateItem(item.id, {
-                            stockQty: val,
-                            stockLevel: val === 0 ? "out" : "plenty",
-                          });
-                        }}
-                        className="h-9 w-full rounded-xl border border-border-subtle bg-canvas px-2.5 tabular-nums text-xs font-semibold text-ink outline-none focus:border-accent disabled:opacity-50"
-                      />
+                      {isPresenceUnit(item.unitType) ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateItem(item.id, {
+                              stockLevel:
+                                item.stockLevel === "out" ? "plenty" : "out",
+                              stockQty: null,
+                            })
+                          }
+                          className={`apple-press flex h-9 w-full items-center justify-center rounded-xl border px-2.5 text-xs font-semibold ${
+                            item.stockLevel === "out"
+                              ? "border-danger/40 bg-danger-soft text-danger"
+                              : "border-ready/40 bg-ready-soft text-ready"
+                          }`}
+                        >
+                          {item.stockLevel === "out"
+                            ? "No lo tengo"
+                            : "Lo tengo"}
+                        </button>
+                      ) : (
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="any"
+                          disabled={item.unitType === "qualitative"}
+                          value={
+                            item.unitType === "qualitative"
+                              ? ""
+                              : (item.stockQty ?? "")
+                          }
+                          placeholder={
+                            item.unitType === "qualitative" ? "A ojo" : "0"
+                          }
+                          onChange={(e) => {
+                            const val =
+                              e.target.value === ""
+                                ? null
+                                : Number(e.target.value);
+                            updateItem(item.id, {
+                              stockQty: val,
+                              stockLevel: val === 0 ? "out" : "plenty",
+                            });
+                          }}
+                          className="h-9 w-full rounded-xl border border-border-subtle bg-canvas px-2.5 tabular-nums text-xs font-semibold text-ink outline-none focus:border-accent disabled:opacity-50"
+                        />
+                      )}
                     </div>
 
                     {/* Unit */}
                     <div>
                       <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-dim">
-                        Unidad
+                        Medición
                       </label>
                       <select
                         value={item.unitType}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const nextUnit = e.target.value as UnitType;
                           updateItem(item.id, {
-                            unitType: e.target.value as UnitType,
-                          })
-                        }
+                            unitType: nextUnit,
+                            ...(isNonCountableUnit(nextUnit)
+                              ? { stockQty: null }
+                              : item.stockQty === null
+                                ? { stockQty: 5 }
+                                : {}),
+                          });
+                        }}
                         className="h-9 w-full rounded-xl border border-border-subtle bg-canvas px-2.5 text-xs font-medium text-ink outline-none focus:border-accent"
                       >
                         {UNIT_SELECT_OPTIONS.map((u) => (

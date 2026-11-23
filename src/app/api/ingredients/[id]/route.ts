@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { ingredients } from "@/db/schema";
+import { ingredients, isNonCountableUnit, isPresenceUnit } from "@/db/schema";
 import { requireOwnerSession } from "@/lib/auth/guard";
 import { normalizeText } from "@/lib/domain/normalize";
 import { computeStockLevelFromQty } from "@/lib/domain/matching";
@@ -11,7 +11,7 @@ const updateIngredientSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   groupTag: z.string().trim().max(60).optional(),
   unitType: z
-    .enum(["g", "ml", "unit", "tbsp", "branch", "pinch", "qualitative"])
+    .enum(["g", "ml", "unit", "tbsp", "branch", "pinch", "qualitative", "presence"])
     .optional(),
   stockQty: z.number().min(0).nullable().optional(),
   lowThreshold: z.number().min(0).nullable().optional(),
@@ -54,21 +54,57 @@ export async function PATCH(
     }
 
     const data = parsed.data;
-    const nextQty =
-      data.stockQty !== undefined ? data.stockQty : existing.stockQty;
-    const nextLow =
-      data.lowThreshold !== undefined ? data.lowThreshold : existing.lowThreshold;
+    const nextNormalizedName =
+      data.name !== undefined ? normalizeText(data.name) : undefined;
 
-    const nextLevel =
+    if (nextNormalizedName !== undefined) {
+      const [conflict] = await db
+        .select({ id: ingredients.id, name: ingredients.name })
+        .from(ingredients)
+        .where(
+          and(
+            eq(ingredients.normalizedName, nextNormalizedName),
+            ne(ingredients.id, id)
+          )
+        );
+      if (conflict) {
+        return NextResponse.json(
+          {
+            error: `Ya existe otro ingrediente llamado "${conflict.name}" en tu alacena.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    const nextUnitType = data.unitType ?? existing.unitType;
+    const nextQty = isNonCountableUnit(nextUnitType)
+      ? null
+      : data.stockQty !== undefined
+        ? data.stockQty
+        : existing.stockQty;
+    const nextLow = isNonCountableUnit(nextUnitType)
+      ? null
+      : data.lowThreshold !== undefined
+        ? data.lowThreshold
+        : existing.lowThreshold;
+
+    const rawLevel =
       data.stockLevel !== undefined
         ? data.stockLevel
         : computeStockLevelFromQty(nextQty, nextLow, existing.stockLevel);
 
+    const nextLevel = isPresenceUnit(nextUnitType)
+      ? rawLevel === "out"
+        ? "out"
+        : "plenty"
+      : rawLevel;
+
     const [updated] = await db
       .update(ingredients)
       .set({
-        ...(data.name !== undefined
-          ? { name: data.name, normalizedName: normalizeText(data.name) }
+        ...(data.name !== undefined && nextNormalizedName !== undefined
+          ? { name: data.name, normalizedName: nextNormalizedName }
           : {}),
         ...(data.groupTag !== undefined ? { groupTag: data.groupTag } : {}),
         ...(data.unitType !== undefined ? { unitType: data.unitType } : {}),

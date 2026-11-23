@@ -476,6 +476,18 @@ async function seed() {
         normalizedName: normalizeText(ing.name),
       })
       .onConflictDoNothing();
+
+    // Ensure presence-based reusable items (crystals, cards, tools) are migrated to unitType = "presence"
+    if (ing.unitType === "presence") {
+      await db
+        .update(ingredients)
+        .set({
+          unitType: "presence",
+          groupTag: ing.groupTag,
+          stockQty: null,
+        })
+        .where(eq(ingredients.normalizedName, normalizeText(ing.name)));
+    }
   }
 
   // Resolve ingredient IDs by normalizedName in case any already existed under another ID

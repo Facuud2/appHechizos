@@ -1,4 +1,4 @@
-import type { StockLevel, UnitType } from "@/db/schema";
+import { isNonCountableUnit, type StockLevel, type UnitType } from "@/db/schema";
 import { computeStockLevelFromQty } from "./matching";
 
 export interface StockDeductionTarget {
@@ -23,6 +23,8 @@ export function computeStockDeductions(
 ): StockDeductionResult[] {
   return targets.map((t) => {
     if (
+      isNonCountableUnit(t.ingredientUnitType) ||
+      isNonCountableUnit(t.requiredUnit) ||
       t.currentQty === null ||
       t.requiredQty === null ||
       t.requiredQty <= 0 ||

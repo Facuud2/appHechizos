@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "node:crypto";
 import { getDb } from "@/db";
-import { ingredients } from "@/db/schema";
+import { ingredients, isNonCountableUnit, isPresenceUnit } from "@/db/schema";
 import { requireOwnerSession } from "@/lib/auth/guard";
 import { normalizeText } from "@/lib/domain/normalize";
 import { computeStockLevelFromQty } from "@/lib/domain/matching";
@@ -12,7 +12,7 @@ const bulkIngredientItemSchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
   groupTag: z.string().trim().max(60).default("General"),
   unitType: z
-    .enum(["g", "ml", "unit", "tbsp", "branch", "pinch", "qualitative"])
+    .enum(["g", "ml", "unit", "tbsp", "branch", "pinch", "qualitative", "presence"])
     .default("unit"),
   stockQty: z.number().min(0).nullable().optional(),
   lowThreshold: z.number().min(0).nullable().optional(),
@@ -69,10 +69,10 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const isQualitative = item.unitType === "qualitative";
+        const isNonCountable = isNonCountableUnit(item.unitType);
         let nextQty: number | null = existing.stockQty;
 
-        if (!isQualitative) {
+        if (!isNonCountable) {
           if (item.duplicateAction === "add_stock") {
             const base = existing.stockQty ?? 0;
             const add = item.stockQty ?? 0;
@@ -89,10 +89,16 @@ export async function POST(req: NextRequest) {
             ? item.unitCostArs
             : existing.unitCostArs;
 
+        const rawLevel = isPresenceUnit(item.unitType)
+          ? item.stockLevel === "out"
+            ? "out"
+            : "plenty"
+          : item.stockLevel;
+
         const nextLevel = computeStockLevelFromQty(
           nextQty,
           existing.lowThreshold,
-          item.stockLevel
+          rawLevel
         );
 
         const [updated] = await db
@@ -113,12 +119,18 @@ export async function POST(req: NextRequest) {
         processed.push(updated);
       } else {
         const id = `ing-${crypto.randomUUID().slice(0, 12)}`;
-        const qty =
-          item.unitType === "qualitative" ? null : (item.stockQty ?? null);
+        const qty = isNonCountableUnit(item.unitType)
+          ? null
+          : (item.stockQty ?? null);
+        const rawLevel = isPresenceUnit(item.unitType)
+          ? item.stockLevel === "out"
+            ? "out"
+            : "plenty"
+          : item.stockLevel;
         const level = computeStockLevelFromQty(
           qty,
           item.lowThreshold ?? null,
-          item.stockLevel
+          rawLevel
         );
 
         const [created] = await db

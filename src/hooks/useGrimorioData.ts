@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { normalizeText } from "@/lib/domain/normalize";
 import type { BootstrapPayload, IngredientItem } from "@/types/app";
 
 export class HttpError extends Error {
@@ -224,7 +225,15 @@ export function useUpdateIngredient() {
         qc.setQueryData<BootstrapPayload>(GRIMORIO_QUERY_KEY, {
           ...prev,
           ingredients: prev.ingredients.map((ing) =>
-            ing.id === id ? { ...ing, ...patch } : ing
+            ing.id === id
+              ? {
+                  ...ing,
+                  ...patch,
+                  ...(patch.name !== undefined
+                    ? { normalizedName: normalizeText(patch.name) }
+                    : {}),
+                }
+              : ing
           ),
         });
       }

@@ -1,4 +1,4 @@
-import type { StockLevel, UnitType } from "@/db/schema";
+import { isNonCountableUnit, type StockLevel, type UnitType } from "@/db/schema";
 import type { CategoryItem, IngredientItem } from "@/types/app";
 import { normalizeText } from "./normalize";
 
@@ -82,11 +82,25 @@ export function inferGroupAndUnit(name: string): {
     return { groupTag: "Aceites", unitType: "ml", defaultQty: 30 };
   }
   if (
-    /\b(cuarzo|piedra|iman|pirita|turmalina|amatista|citrino|selenita|obsidiana|cristal|jade|agata)\b/.test(
+    /\b(cuarzo|piedra|iman|pirita|turmalina|amatista|citrino|selenita|obsidiana|cristal|jade|agata|lapislazuli|malaquita|jaspe|onice|cornalina|hematita|rodocrosita)s?\b/.test(
       n
     )
   ) {
-    return { groupTag: "Cristales", unitType: "unit", defaultQty: 3 };
+    return { groupTag: "Cristales", unitType: "presence", defaultQty: null };
+  }
+  if (
+    /\b(mazo|tarot|carta|cartas|espanola|espanolas|baraja|oraculo|runa|runas|pendulo)s?\b/.test(
+      n
+    )
+  ) {
+    return { groupTag: "Cartas", unitType: "presence", defaultQty: null };
+  }
+  if (
+    /\b(tijera|sahumador|caldero|mortero|campana|athame|cuchillo|copa|altar|portavela|candelabro|prenda|camison|foto|fotografia)s?\b/.test(
+      n
+    )
+  ) {
+    return { groupTag: "Otros", unitType: "presence", defaultQty: null };
   }
   if (/\b(sahumerio|incienso|carbon|mirra|copal|benjui|palo santo|resina)s?\b/.test(n)) {
     return {
@@ -171,6 +185,9 @@ function mapUnitToken(token: string): UnitType | null {
   }
   if (["pizca", "pizcas", "pizquita"].includes(t)) return "pinch";
   if (["ojo", "aojo", "cualitativo"].includes(t)) return "qualitative";
+  if (["existencia", "presencia", "permanente", "unico"].includes(t)) {
+    return "presence";
+  }
   return null;
 }
 
@@ -308,11 +325,15 @@ export function parseSingleIngredientLine(
   const inferred = inferGroupAndUnit(formattedName);
 
   const unitType: UnitType =
-    explicitUnit ?? existing?.unitType ?? inferred.unitType;
+    explicitUnit ??
+    existing?.unitType ??
+    (inferred.unitType === "presence" && explicitQty !== null
+      ? "unit"
+      : inferred.unitType);
   const groupTag = explicitGroup ?? existing?.groupTag ?? inferred.groupTag;
 
   let stockQty: number | null = null;
-  if (unitType !== "qualitative") {
+  if (!isNonCountableUnit(unitType)) {
     if (isOut) {
       stockQty = 0;
     } else if (explicitQty !== null) {
@@ -323,7 +344,7 @@ export function parseSingleIngredientLine(
   }
 
   const stockLevel: StockLevel =
-    isOut || (unitType !== "qualitative" && stockQty === 0) ? "out" : "plenty";
+    isOut || (!isNonCountableUnit(unitType) && stockQty === 0) ? "out" : "plenty";
 
   return {
     id: `draft-ing-${idx}-${normalized.replace(/[^a-z0-9]/g, "")}`,
@@ -383,7 +404,7 @@ export function parseBulkIngredientsText(
     if (prev) {
       // Combine quantities if repeated in same paste
       if (
-        prev.unitType !== "qualitative" &&
+        !isNonCountableUnit(prev.unitType) &&
         prev.stockQty !== null &&
         parsed.stockQty !== null
       ) {
@@ -414,7 +435,13 @@ export function parseRecipeIngredientToken(
   // Determine whether an explicit number was present in the token
   const hasExplicitNum = /\d/.test(token);
   const inferred = inferGroupAndUnit(single.name);
-  const unit: UnitType = single.unitType;
+  const existing = existingMap.get(single.normalizedName);
+  // If existing or inferred is a permanent presence item (crystal, tarot deck, tool),
+  // keep it as "presence" in recipe tokens too (e.g. "Cuarzo rosa 1u" or "Cuarzo rosa")
+  const unit: UnitType =
+    existing?.unitType === "presence" || inferred.unitType === "presence"
+      ? "presence"
+      : single.unitType;
   const defaultRecipeQty: Record<UnitType, number | null> = {
     unit: 1,
     g: 10,
@@ -423,6 +450,7 @@ export function parseRecipeIngredientToken(
     tbsp: 1,
     pinch: 1,
     qualitative: null,
+    presence: null,
   };
 
   return {
@@ -430,7 +458,7 @@ export function parseRecipeIngredientToken(
     name: single.name,
     normalizedName: single.normalizedName,
     quantity:
-      unit === "qualitative"
+      isNonCountableUnit(unit)
         ? null
         : hasExplicitNum
           ? single.stockQty

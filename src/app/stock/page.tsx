@@ -6,13 +6,16 @@ import {
   Ban,
   BookOpen,
   Camera,
+  CheckCircle2,
   DollarSign,
+  Edit3,
   Layers,
   Loader2,
   Minus,
   Plus,
   RotateCcw,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,6 +36,7 @@ import { normalizeText } from "@/lib/domain/normalize";
 import { formatArs } from "@/lib/format";
 import { uploadEntityCover } from "@/lib/upload-cover";
 import { UNIT_LABELS, type IngredientItem } from "@/types/app";
+import { isNonCountableUnit, isPresenceUnit, type UnitType } from "@/db/schema";
 
 /** Inline exact-number + stepper control; locked when "Sin stock" is active */
 function StockQtyEditor({
@@ -231,6 +235,8 @@ export default function StockAlacenaPage() {
   const [modalInitialMode, setModalInitialMode] = useState<"single" | "bulk">(
     "single"
   );
+  const [editingIngredient, setEditingIngredient] =
+    useState<IngredientItem | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
 
@@ -300,7 +306,7 @@ export default function StockAlacenaPage() {
         id: ing.id,
         patch: {
           stockLevel: "plenty",
-          ...(ing.unitType !== "qualitative" && (ing.stockQty ?? 0) === 0
+          ...(!isNonCountableUnit(ing.unitType) && (ing.stockQty ?? 0) === 0
             ? { stockQty: 1 }
             : {}),
         },
@@ -310,7 +316,36 @@ export default function StockAlacenaPage() {
         id: ing.id,
         patch: {
           stockLevel: "out",
-          ...(ing.unitType !== "qualitative" ? { stockQty: 0 } : {}),
+          ...(!isNonCountableUnit(ing.unitType) ? { stockQty: 0 } : {}),
+        },
+      });
+    }
+  }
+
+  function toggleTrackingMode(ing: IngredientItem) {
+    const nextIsPresence = !isPresenceUnit(ing.unitType);
+    if (nextIsPresence) {
+      updateMut.mutate({
+        id: ing.id,
+        patch: {
+          unitType: "presence",
+          stockQty: null,
+          stockLevel: ing.stockLevel === "out" ? "out" : "plenty",
+        },
+      });
+    } else {
+      const fallbackUnit: UnitType =
+        ing.groupTag === "Hierbas"
+          ? "g"
+          : ing.groupTag === "Aceites"
+            ? "ml"
+            : "unit";
+      updateMut.mutate({
+        id: ing.id,
+        patch: {
+          unitType: fallbackUnit,
+          stockQty: ing.stockLevel === "out" ? 0 : fallbackUnit === "g" ? 50 : fallbackUnit === "ml" ? 30 : 1,
+          stockLevel: ing.stockLevel === "out" ? "out" : "plenty",
         },
       });
     }
@@ -347,6 +382,7 @@ export default function StockAlacenaPage() {
           <button
             type="button"
             onClick={() => {
+              setEditingIngredient(null);
               setModalInitialMode("bulk");
               setModalOpen(true);
             }}
@@ -359,6 +395,7 @@ export default function StockAlacenaPage() {
           <button
             type="button"
             onClick={() => {
+              setEditingIngredient(null);
               setModalInitialMode("single");
               setModalOpen(true);
             }}
@@ -479,7 +516,11 @@ export default function StockAlacenaPage() {
             )}
             <button
               type="button"
-              onClick={() => setModalOpen(true)}
+              onClick={() => {
+                setEditingIngredient(null);
+                setModalInitialMode("single");
+                setModalOpen(true);
+              }}
               className="apple-press inline-flex min-h-10 items-center gap-1.5 rounded-[12px] bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -576,21 +617,44 @@ export default function StockAlacenaPage() {
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            confirm(`¿Eliminar "${ing.name}" de tu alacena?`)
-                          ) {
-                            deleteMut.mutate(ing.id);
-                          }
-                        }}
-                        aria-label={`Eliminar ${ing.name}`}
-                        className="apple-press hit-44 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-ink-dim hover:bg-danger-soft hover:text-danger"
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingIngredient(ing);
+                            setModalInitialMode("single");
+                            setModalOpen(true);
+                          }}
+                          aria-label={`Editar ${ing.name}`}
+                          title={`Editar ${ing.name}`}
+                          className="apple-press hit-44 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-ink-dim hover:bg-accent-soft hover:text-accent-text"
+                        >
+                          <Edit3 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              confirm(`¿Eliminar "${ing.name}" de tu alacena?`)
+                            ) {
+                              deleteMut.mutate(ing.id);
+                            }
+                          }}
+                          aria-label={`Eliminar ${ing.name}`}
+                          title={`Eliminar ${ing.name}`}
+                          className="apple-press hit-44 flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-ink-dim hover:bg-danger-soft hover:text-danger"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
+
+                    {ing.notes && (
+                      <p className="mt-1 line-clamp-1 text-xs text-ink-dim">
+                        {ing.notes}
+                      </p>
+                    )}
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                       <button
@@ -612,22 +676,70 @@ export default function StockAlacenaPage() {
                         </span>
                       </button>
 
-                      <CostInlineEditor
-                        ingredient={ing}
-                        onSave={(unitCostArs) =>
-                          updateMut.mutate({
-                            id: ing.id,
-                            patch: { unitCostArs },
-                          })
+                      <button
+                        type="button"
+                        onClick={() => toggleTrackingMode(ing)}
+                        title={
+                          isPresenceUnit(ing.unitType)
+                            ? "Cambiar a ingrediente contable con stock numérico"
+                            : "Cambiar a elemento permanente (solo existencia: Lo tengo / No lo tengo)"
                         }
-                      />
+                        className={`apple-press inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-medium ${
+                          isPresenceUnit(ing.unitType)
+                            ? "bg-accent-soft text-accent-text"
+                            : "hover:bg-surface-elevated hover:text-accent-text"
+                        }`}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span>
+                          {isPresenceUnit(ing.unitType)
+                            ? "Solo existencia"
+                            : "Contable"}
+                        </span>
+                      </button>
+
+                      {(!isPresenceUnit(ing.unitType) ||
+                        ing.unitCostArs !== null) && (
+                        <CostInlineEditor
+                          ingredient={ing}
+                          onSave={(unitCostArs) =>
+                            updateMut.mutate({
+                              id: ing.id,
+                              patch: { unitCostArs },
+                            })
+                          }
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Bottom Action Bar: Exact Qty + Single "Sin stock" Lock Button */}
+                {/* Bottom Action Bar: Exact Qty or Presence Status + Action Button */}
                 <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2.5 border-t border-border-subtle pt-3">
-                  {ing.unitType !== "qualitative" ? (
+                  {isPresenceUnit(ing.unitType) ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${
+                        isOut
+                          ? "border-danger/35 bg-danger-soft/60 text-danger"
+                          : "border-ready/35 bg-ready-soft/70 text-ready"
+                      }`}
+                    >
+                      {isOut ? (
+                        <>
+                          <Ban className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>No lo tengo</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                          <span>En alacena (no se gasta)</span>
+                        </>
+                      )}
+                    </span>
+                  ) : ing.unitType !== "qualitative" ? (
                     <StockQtyEditor
                       ingredient={ing}
                       disabled={isOut}
@@ -651,7 +763,13 @@ export default function StockAlacenaPage() {
                     }`}
                   >
                     <Ban className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Sin stock</span>
+                    <span>
+                      {isPresenceUnit(ing.unitType)
+                        ? isOut
+                          ? "No lo tengo"
+                          : "Marcar que no hay"
+                        : "Sin stock"}
+                    </span>
                   </button>
                 </div>
 
@@ -686,7 +804,11 @@ export default function StockAlacenaPage() {
       <QuickIngredientModal
         open={modalOpen}
         initialMode={modalInitialMode}
-        onClose={() => setModalOpen(false)}
+        editingIngredient={editingIngredient}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingIngredient(null);
+        }}
       />
     </AppShell>
   );

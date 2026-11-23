@@ -3,7 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "node:crypto";
 import { getDb } from "@/db";
-import { ingredients } from "@/db/schema";
+import { ingredients, isNonCountableUnit, isPresenceUnit } from "@/db/schema";
 import { requireOwnerSession } from "@/lib/auth/guard";
 import { normalizeText } from "@/lib/domain/normalize";
 import { computeStockLevelFromQty } from "@/lib/domain/matching";
@@ -12,7 +12,7 @@ const createIngredientSchema = z.object({
   name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
   groupTag: z.string().trim().max(60).default("General"),
   unitType: z
-    .enum(["g", "ml", "unit", "tbsp", "branch", "pinch", "qualitative"])
+    .enum(["g", "ml", "unit", "tbsp", "branch", "pinch", "qualitative", "presence"])
     .default("unit"),
   stockQty: z.number().min(0).nullable().optional(),
   lowThreshold: z.number().min(0).nullable().optional(),
@@ -62,11 +62,16 @@ export async function POST(req: NextRequest) {
     }
 
     const id = `ing-${crypto.randomUUID().slice(0, 12)}`;
-    const qty = data.unitType === "qualitative" ? null : (data.stockQty ?? null);
+    const qty = isNonCountableUnit(data.unitType) ? null : (data.stockQty ?? null);
+    const rawLevel = isPresenceUnit(data.unitType)
+      ? data.stockLevel === "out"
+        ? "out"
+        : "plenty"
+      : data.stockLevel;
     const level = computeStockLevelFromQty(
       qty,
       data.lowThreshold ?? null,
-      data.stockLevel
+      rawLevel
     );
 
     const [created] = await db

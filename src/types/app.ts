@@ -132,4 +132,5 @@ export const UNIT_LABELS: Record<UnitType, string> = {
   branch: "ramas",
   pinch: "pizca",
   qualitative: "a ojo",
+  presence: "existencia",
 };

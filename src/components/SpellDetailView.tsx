@@ -43,7 +43,7 @@ import {
 } from "./Skeletons";
 import { SpellFormModal } from "./SpellFormModal";
 import { UNIT_LABELS, type SpellItem, type SpellVariationItem } from "@/types/app";
-import type { UnitType } from "@/db/schema";
+import { isNonCountableUnit, isPresenceUnit, type UnitType } from "@/db/schema";
 
 type TabId = "resumen" | "ingredientes" | "pasos";
 
@@ -272,10 +272,14 @@ export function SpellDetailView({
     }
   }
 
-  async function handleAddIngredientToVariation(overrideIngId?: string) {
+  async function handleAddIngredientToVariation(
+    overrideIngId?: string,
+    overrideUnit?: UnitType
+  ) {
     if (!activeVariation) return;
     const ingId = overrideIngId || selectedAddIngId;
     if (!ingId) return;
+    const effectiveUnit = overrideUnit || addUnit;
 
     setSavingVariation(true);
     try {
@@ -289,8 +293,11 @@ export function SpellDetailView({
         })),
         {
           ingredientId: ingId,
-          quantity: addUnit === "qualitative" || addQty === "" ? null : Number(addQty),
-          unit: addUnit,
+          quantity:
+            isNonCountableUnit(effectiveUnit) || addQty === ""
+              ? null
+              : Number(addQty),
+          unit: effectiveUnit,
           isOptional: addOptional,
           substitutionNote: addSubNote.trim() || null,
         },
@@ -915,19 +922,35 @@ export function SpellDetailView({
                               )}
                             </p>
                             <p className="text-xs text-ink-muted tabular-nums">
-                              Lleva:{" "}
-                              <strong className="text-ink">
-                                {vi.quantity !== null ? vi.quantity : ""}{" "}
-                                {UNIT_LABELS[vi.unit]}
-                              </strong>{" "}
-                              · En stock:{" "}
-                              {ing?.stockQty !== null && ing?.stockQty !== undefined
-                                ? `${ing.stockQty} ${UNIT_LABELS[ing.unitType as UnitType]}`
-                                : ing?.stockLevel === "plenty"
-                                  ? "Tengo"
-                                  : ing?.stockLevel === "low"
-                                    ? "Poco"
-                                    : "Sin stock"}
+                              {isPresenceUnit(ing?.unitType ?? vi.unit) ? (
+                                <>
+                                  Requiere:{" "}
+                                  <strong className="text-ink">
+                                    Presencia en altar
+                                  </strong>{" "}
+                                  · En alacena:{" "}
+                                  {ing?.stockLevel === "out"
+                                    ? "No lo tengo"
+                                    : "Disponible (no se gasta)"}
+                                </>
+                              ) : (
+                                <>
+                                  Lleva:{" "}
+                                  <strong className="text-ink">
+                                    {vi.quantity !== null ? vi.quantity : ""}{" "}
+                                    {UNIT_LABELS[vi.unit]}
+                                  </strong>{" "}
+                                  · En stock:{" "}
+                                  {ing?.stockQty !== null &&
+                                  ing?.stockQty !== undefined
+                                    ? `${ing.stockQty} ${UNIT_LABELS[ing.unitType as UnitType]}`
+                                    : ing?.stockLevel === "plenty"
+                                      ? "Tengo"
+                                      : ing?.stockLevel === "low"
+                                        ? "Poco"
+                                        : "Sin stock"}
+                                </>
+                              )}
                             </p>
                             {vi.substitutionNote && (
                               <p className="mt-0.5 text-xs font-medium text-accent-text">
@@ -989,10 +1012,17 @@ export function SpellDetailView({
                     inputMode="decimal"
                     min="0"
                     step="any"
-                    value={addQty}
+                    disabled={isNonCountableUnit(addUnit)}
+                    value={isNonCountableUnit(addUnit) ? "" : addQty}
                     onChange={(e) => setAddQty(e.target.value)}
-                    placeholder="Cant."
-                    className="col-span-4 rounded-xl border border-border-subtle bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent sm:col-span-2"
+                    placeholder={
+                      isPresenceUnit(addUnit)
+                        ? "Sí/No"
+                        : addUnit === "qualitative"
+                          ? "A ojo"
+                          : "Cant."
+                    }
+                    className="col-span-4 rounded-xl border border-border-subtle bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent disabled:opacity-45 sm:col-span-2"
                   />
 
                   <select
@@ -1553,7 +1583,7 @@ export function SpellDetailView({
         onCreated={(ing) => {
           setSelectedAddIngId(ing.id);
           setAddUnit(ing.unitType);
-          handleAddIngredientToVariation(ing.id);
+          handleAddIngredientToVariation(ing.id, ing.unitType);
         }}
       />
 

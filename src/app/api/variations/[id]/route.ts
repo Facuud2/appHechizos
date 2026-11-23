@@ -18,6 +18,7 @@ const unitEnum = z.enum([
   "branch",
   "pinch",
   "qualitative",
+  "presence",
 ]);
 
 const updateVariationSchema = z.object({

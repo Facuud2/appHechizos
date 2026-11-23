@@ -6,6 +6,7 @@ import { getDb } from "@/db";
 import {
   categories,
   ingredients,
+  isNonCountableUnit,
   spells,
   spellPriceTiers,
   spellVariations,
@@ -23,6 +24,7 @@ const unitEnum = z.enum([
   "branch",
   "pinch",
   "qualitative",
+  "presence",
 ]);
 
 const bulkSpellRecipeIngSchema = z.object({
@@ -173,10 +175,9 @@ export async function POST(req: NextRequest) {
             const inferred = inferGroupAndUnit(recIng.name);
             const newIngId = `ing-${crypto.randomUUID().slice(0, 12)}`;
             const unitType = recIng.unit ?? inferred.unitType;
-            const defaultStock =
-              unitType === "qualitative"
-                ? null
-                : (recIng.quantity ?? inferred.defaultQty ?? 5);
+            const defaultStock = isNonCountableUnit(unitType)
+              ? null
+              : (recIng.quantity ?? inferred.defaultQty ?? 5);
 
             const [createdIng] = await db
               .insert(ingredients)
@@ -202,13 +203,16 @@ export async function POST(req: NextRequest) {
           if (seenIngIds.has(targetIng.id)) continue;
           seenIngIds.add(targetIng.id);
 
+          const effectiveUnit =
+            targetIng.unitType === "presence" ? "presence" : recIng.unit;
           varIngRows.push({
             id: `vi-${crypto.randomUUID().slice(0, 10)}`,
             variationId: baseVarId,
             ingredientId: targetIng.id,
-            quantity:
-              recIng.unit === "qualitative" ? null : (recIng.quantity ?? 1),
-            unit: recIng.unit,
+            quantity: isNonCountableUnit(effectiveUnit)
+              ? null
+              : (recIng.quantity ?? 1),
+            unit: effectiveUnit,
             isOptional: recIng.isOptional,
             substitutionNote: null,
             sortOrder: idx + 1,

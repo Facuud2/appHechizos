@@ -17,7 +17,24 @@ export type UnitType =
   | "tbsp"
   | "branch"
   | "pinch"
-  | "qualitative";
+  | "qualitative"
+  | "presence";
+
+/**
+ * Helper to identify units that do not track a numeric stock quantity
+ * ("qualitative" = A ojo [Tengo / Poco / Sin], "presence" = Existencia [Lo tengo / No lo tengo]).
+ */
+export function isNonCountableUnit(unit: UnitType): boolean {
+  return unit === "qualitative" || unit === "presence";
+}
+
+/**
+ * Helper to identify reusable/permanent altar items (crystals, stones, tarot/spanish decks, tools)
+ * that are never consumed or deducted when performing a spell, and only have binary presence.
+ */
+export function isPresenceUnit(unit: UnitType): boolean {
+  return unit === "presence";
+}
 
 export type StockLevel = "plenty" | "low" | "out";
 export type MediaType = "image" | "video";

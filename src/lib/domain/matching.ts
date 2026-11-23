@@ -1,4 +1,4 @@
-import type { StockLevel, UnitType } from "@/db/schema";
+import { isPresenceUnit, type StockLevel, type UnitType } from "@/db/schema";
 
 export interface StockIngredientSnapshot {
   id: string;
@@ -92,6 +92,21 @@ export function evaluateVariationAvailability(
         requiredQty: item.quantity,
         requiredUnit: item.unit,
         availableQty: stock?.stockQty ?? 0,
+        substitutionNote: item.substitutionNote,
+      };
+    }
+
+    // Reusable / presence-only items (crystals, stones, decks, tools):
+    // Availability depends strictly on presence (not out), never on numeric quantity or "low" warning.
+    if (isPresenceUnit(stock.unitType) || isPresenceUnit(item.unit)) {
+      return {
+        ingredientId: item.ingredientId,
+        ingredientName: item.ingredientName,
+        isOptional: item.isOptional,
+        status: "available",
+        requiredQty: null,
+        requiredUnit: item.unit,
+        availableQty: null,
         substitutionNote: item.substitutionNote,
       };
     }

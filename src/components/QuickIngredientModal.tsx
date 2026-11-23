@@ -15,11 +15,18 @@ import { toast } from "sonner";
 import {
   useCreateIngredient,
   useGrimorio,
+  useUpdateIngredient,
 } from "@/hooks/useGrimorioData";
 import { BulkIngredientsPanel } from "./BulkIngredientsPanel";
 import { IosBottomSheet } from "./IosBottomSheet";
 import type { IngredientItem } from "@/types/app";
-import type { StockLevel, UnitType } from "@/db/schema";
+import {
+  isNonCountableUnit,
+  isPresenceUnit,
+  type StockLevel,
+  type UnitType,
+} from "@/db/schema";
+import { inferGroupAndUnit } from "@/lib/domain/bulk-parser";
 
 const DEFAULT_GROUP_TAGS = [
   "Hierbas",
@@ -27,6 +34,7 @@ const DEFAULT_GROUP_TAGS = [
   "Insumos",
   "Aceites",
   "Cristales",
+  "Cartas",
   "Inciensos",
   "Otros",
 ];
@@ -36,9 +44,10 @@ const DEFAULT_UNIT_BY_GROUP: Record<string, UnitType> = {
   Velas: "unit",
   Insumos: "unit",
   Aceites: "ml",
-  Cristales: "unit",
+  Cristales: "presence",
+  Cartas: "presence",
   Inciensos: "unit",
-  Otros: "unit",
+  Otros: "presence",
 };
 
 const DEFAULT_QTY_BY_UNIT: Record<UnitType, string> = {
@@ -49,9 +58,15 @@ const DEFAULT_QTY_BY_UNIT: Record<UnitType, string> = {
   tbsp: "10",
   pinch: "10",
   qualitative: "",
+  presence: "",
 };
 
-const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
+const UNIT_OPTIONS: { value: UnitType; label: string; hint?: string }[] = [
+  {
+    value: "presence",
+    label: "Solo existencia (Lo tengo / No lo tengo)",
+    hint: "Para cristales, piedras, mazos de cartas o herramientas que no se gastan",
+  },
   { value: "unit", label: "Unidades (u.)" },
   { value: "g", label: "Gramos (g)" },
   { value: "ml", label: "Mililitros (ml)" },
@@ -64,64 +79,152 @@ const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
 const INGREDIENT_STEPS = [
   { id: 0, title: "Nombre y Rubro" },
   { id: 1, title: "Medición y Stock" },
-  { id: 2, title: "Costo Unitario" },
+  { id: 2, title: "Costo y Notas" },
 ] as const;
 
 export function QuickIngredientModal({
   open,
   initialName = "",
   initialMode = "single",
+  editingIngredient = null,
   onClose,
   onCreated,
+  onUpdated,
 }: {
   open: boolean;
   initialName?: string;
   initialMode?: "single" | "bulk";
+  editingIngredient?: IngredientItem | null;
   onClose: () => void;
   onCreated?: (ingredient: IngredientItem) => void;
+  onUpdated?: (ingredient: IngredientItem) => void;
 }) {
   const { data: grimorioData } = useGrimorio();
-  const [mode, setMode] = useState<"single" | "bulk">(initialMode);
+  const isEditing = !!editingIngredient;
+  const [mode, setMode] = useState<"single" | "bulk">(
+    editingIngredient ? "single" : initialMode
+  );
   const [step, setStep] = useState(0);
   const [shakeTick, setShakeTick] = useState(0);
-  const [name, setName] = useState(initialName);
-  const [groupTag, setGroupTag] = useState("Hierbas");
+  const [name, setName] = useState(editingIngredient?.name ?? initialName);
+  const [groupTag, setGroupTag] = useState(
+    editingIngredient?.groupTag ?? "Hierbas"
+  );
   const [customGroups, setCustomGroups] = useState<string[]>([]);
   const [addingGroup, setAddingGroup] = useState(false);
   const [newGroupDraft, setNewGroupDraft] = useState("");
 
-  const [unitType, setUnitType] = useState<UnitType>("g");
-  const [stockQty, setStockQty] = useState("50");
-  const [stockLevel, setStockLevel] = useState<StockLevel>("plenty");
-  const [unitCostArs, setUnitCostArs] = useState("");
+  const [groupTouched, setGroupTouched] = useState(!!editingIngredient);
+  const [unitType, setUnitType] = useState<UnitType>(
+    editingIngredient?.unitType ?? "g"
+  );
+  const [stockQty, setStockQty] = useState(
+    editingIngredient
+      ? editingIngredient.stockQty !== null
+        ? String(editingIngredient.stockQty)
+        : ""
+      : "50"
+  );
+  const [stockLevel, setStockLevel] = useState<StockLevel>(
+    editingIngredient?.stockLevel ?? "plenty"
+  );
+  const [unitCostArs, setUnitCostArs] = useState(
+    editingIngredient?.unitCostArs !== null &&
+      editingIngredient?.unitCostArs !== undefined
+      ? String(editingIngredient.unitCostArs)
+      : ""
+  );
+  const [notes, setNotes] = useState(editingIngredient?.notes ?? "");
   const createMut = useCreateIngredient();
+  const updateMut = useUpdateIngredient();
 
   useEffect(() => {
     if (!open) return;
-    setMode(initialMode);
     setStep(0);
-    setName(initialName);
-    setGroupTag("Hierbas");
     setAddingGroup(false);
     setNewGroupDraft("");
-    setUnitType("g");
-    setStockQty("50");
+
+    if (editingIngredient) {
+      setMode("single");
+      setName(editingIngredient.name);
+      setGroupTag(editingIngredient.groupTag);
+      setGroupTouched(true);
+      setUnitType(editingIngredient.unitType);
+      setStockQty(
+        editingIngredient.stockQty !== null
+          ? String(editingIngredient.stockQty)
+          : ""
+      );
+      setStockLevel(editingIngredient.stockLevel);
+      setUnitCostArs(
+        editingIngredient.unitCostArs !== null
+          ? String(editingIngredient.unitCostArs)
+          : ""
+      );
+      setNotes(editingIngredient.notes ?? "");
+      return;
+    }
+
+    setMode(initialMode);
+    setName(initialName);
+    setGroupTouched(false);
     setStockLevel("plenty");
     setUnitCostArs("");
-  }, [open, initialName, initialMode]);
+    setNotes("");
 
-  const allGroups = Array.from(new Set([...DEFAULT_GROUP_TAGS, ...customGroups]));
+    if (initialName.trim()) {
+      const inferred = inferGroupAndUnit(initialName);
+      setGroupTag(inferred.groupTag);
+      setUnitType(inferred.unitType);
+      setStockQty(DEFAULT_QTY_BY_UNIT[inferred.unitType]);
+    } else {
+      setGroupTag("Hierbas");
+      setUnitType("g");
+      setStockQty("50");
+    }
+  }, [open, initialName, initialMode, editingIngredient]);
+
+  const existingGroups = (grimorioData?.ingredients ?? [])
+    .map((ing) => ing.groupTag)
+    .filter(Boolean);
+  const allGroups = Array.from(
+    new Set([
+      ...DEFAULT_GROUP_TAGS,
+      ...existingGroups,
+      ...customGroups,
+      ...(groupTag ? [groupTag] : []),
+    ])
+  );
+
+  function handleNameChange(nextName: string) {
+    setName(nextName);
+    if (!groupTouched && nextName.trim().length >= 3) {
+      const inferred = inferGroupAndUnit(nextName);
+      setGroupTag(inferred.groupTag);
+      setUnitType(inferred.unitType);
+      setStockQty(DEFAULT_QTY_BY_UNIT[inferred.unitType]);
+    }
+  }
 
   function handleSelectGroup(tag: string) {
+    setGroupTouched(true);
     setGroupTag(tag);
-    const suggestedUnit = DEFAULT_UNIT_BY_GROUP[tag] ?? "unit";
-    setUnitType(suggestedUnit);
-    setStockQty(DEFAULT_QTY_BY_UNIT[suggestedUnit]);
+    // When creating a new ingredient, auto-suggest the default unit for that group.
+    // When editing an existing ingredient, preserve the user's chosen unit & stock.
+    if (!isEditing) {
+      const suggestedUnit = DEFAULT_UNIT_BY_GROUP[tag] ?? "unit";
+      setUnitType(suggestedUnit);
+      setStockQty(DEFAULT_QTY_BY_UNIT[suggestedUnit]);
+      if (isPresenceUnit(suggestedUnit) && stockLevel === "low") {
+        setStockLevel("plenty");
+      }
+    }
   }
 
   function handleCreateGroup() {
     const clean = newGroupDraft.trim();
     if (!clean) return;
+    setGroupTouched(true);
     setCustomGroups((prev) =>
       prev.some((g) => g.toLowerCase() === clean.toLowerCase())
         ? prev
@@ -135,8 +238,11 @@ export function QuickIngredientModal({
 
   function handleSelectUnit(nextUnit: UnitType) {
     setUnitType(nextUnit);
-    if (nextUnit !== "qualitative" && (!stockQty || stockQty === "0")) {
+    if (!isNonCountableUnit(nextUnit) && (!stockQty || stockQty === "0")) {
       setStockQty(DEFAULT_QTY_BY_UNIT[nextUnit]);
+    }
+    if (isPresenceUnit(nextUnit) && stockLevel === "low") {
+      setStockLevel("plenty");
     }
   }
 
@@ -164,6 +270,8 @@ export function QuickIngredientModal({
     setStep((s) => Math.min(INGREDIENT_STEPS.length - 1, s + 1));
   }
 
+  const isSaving = createMut.isPending || updateMut.isPending;
+
   async function saveIngredient() {
     if (!name.trim()) {
       setStep(0);
@@ -172,21 +280,36 @@ export function QuickIngredientModal({
       return;
     }
 
-    try {
-      const res = await createMut.mutateAsync({
-        name: name.trim(),
-        groupTag,
-        unitType,
-        stockQty:
-          unitType === "qualitative" || stockQty === ""
-            ? null
-            : Number(stockQty),
-        stockLevel,
-        unitCostArs: unitCostArs === "" ? null : Number(unitCostArs),
-      });
+    const payload = {
+      name: name.trim(),
+      groupTag,
+      unitType,
+      stockQty:
+        isNonCountableUnit(unitType) || stockQty === ""
+          ? null
+          : Number(stockQty),
+      stockLevel:
+        isPresenceUnit(unitType) && stockLevel === "low"
+          ? ("plenty" as const)
+          : stockLevel,
+      unitCostArs: unitCostArs === "" ? null : Number(unitCostArs),
+      notes: notes.trim() ? notes.trim() : null,
+    };
 
-      onCreated?.(res.ingredient);
-      onClose();
+    try {
+      if (editingIngredient) {
+        const updated = await updateMut.mutateAsync({
+          id: editingIngredient.id,
+          patch: payload,
+        });
+        toast.success(`"${updated.name}" actualizado.`);
+        onUpdated?.(updated);
+        onClose();
+      } else {
+        const res = await createMut.mutateAsync(payload);
+        onCreated?.(res.ingredient);
+        onClose();
+      }
     } catch {
       setShakeTick((t) => t + 1);
     }
@@ -209,7 +332,11 @@ export function QuickIngredientModal({
             id="quick-ing-title"
             className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
           >
-            {mode === "bulk" ? "Carga masiva de ingredientes" : "Nuevo producto"}
+            {isEditing
+              ? "Editar producto"
+              : mode === "bulk"
+                ? "Carga masiva de ingredientes"
+                : "Nuevo producto"}
           </h2>
           <button
             type="button"
@@ -221,41 +348,43 @@ export function QuickIngredientModal({
           </button>
         </div>
 
-        {/* Mode Segmented Toggle: Individual | Carga Masiva */}
-        <div
-          role="tablist"
-          aria-label="Modo de carga de ingredientes"
-          className="mt-2.5 grid grid-cols-2 gap-1 rounded-[12px] border border-border-subtle bg-canvas p-1"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "single"}
-            onClick={() => setMode("single")}
-            className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
-              mode === "single"
-                ? "bg-surface text-ink shadow-xs"
-                : "text-ink-muted hover:text-ink"
-            }`}
+        {/* Mode Segmented Toggle: Individual | Carga Masiva (only when creating) */}
+        {!isEditing && (
+          <div
+            role="tablist"
+            aria-label="Modo de carga de ingredientes"
+            className="mt-2.5 grid grid-cols-2 gap-1 rounded-[12px] border border-border-subtle bg-canvas p-1"
           >
-            <User className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Individual</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "bulk"}
-            onClick={() => setMode("bulk")}
-            className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
-              mode === "bulk"
-                ? "bg-accent-soft text-accent-text shadow-xs"
-                : "text-ink-muted hover:text-ink"
-            }`}
-          >
-            <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Carga Masiva</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "single"}
+              onClick={() => setMode("single")}
+              className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
+                mode === "single"
+                  ? "bg-surface text-ink shadow-xs"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <User className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Individual</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "bulk"}
+              onClick={() => setMode("bulk")}
+              className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
+                mode === "bulk"
+                  ? "bg-accent-soft text-accent-text shadow-xs"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Carga Masiva</span>
+            </button>
+          </div>
+        )}
 
         {mode === "single" && (
           <>
@@ -347,14 +476,14 @@ export function QuickIngredientModal({
                   required
                   autoFocus
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
                       goNext();
                     }
                   }}
-                  placeholder="Ej. Romero, Vela roja, Miel pura..."
+                  placeholder="Ej. Romero, Cuarzo rosa, Mazo de Tarot, Vela roja..."
                   className="w-full rounded-xl border border-border-subtle bg-canvas px-3.5 py-3 text-base text-ink placeholder:text-ink-dim outline-none focus:border-accent"
                 />
               </div>
@@ -433,23 +562,33 @@ export function QuickIngredientModal({
             <div key="ing-step-1" className="animate-variation-enter space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-ink-muted">
-                  1. ¿Cómo lo medís?
+                  1. ¿Cómo lo controlás?
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {UNIT_OPTIONS.map((u) => {
                     const selected = unitType === u.value;
+                    const isPresenceOpt = u.value === "presence";
                     return (
                       <button
                         key={u.value}
                         type="button"
                         onClick={() => handleSelectUnit(u.value)}
-                        className={`apple-press flex min-h-10 items-center justify-between gap-1.5 rounded-xl border px-3 py-2 text-left text-xs font-medium ${
+                        className={`apple-press flex min-h-10 items-center justify-between gap-1.5 rounded-xl border px-3 py-2.5 text-left text-xs font-medium ${
+                          isPresenceOpt ? "col-span-2" : ""
+                        } ${
                           selected
                             ? "border-accent bg-accent-soft font-semibold text-accent-text"
                             : "border-border-subtle bg-canvas text-ink-muted hover:text-ink"
                         }`}
                       >
-                        <span className="truncate">{u.label}</span>
+                        <div className="min-w-0">
+                          <span className="block truncate">{u.label}</span>
+                          {u.hint && (
+                            <span className="mt-0.5 block text-[11px] font-normal text-ink-dim">
+                              {u.hint}
+                            </span>
+                          )}
+                        </div>
                         {selected && (
                           <Check className="h-3.5 w-3.5 shrink-0 text-accent-text" aria-hidden="true" />
                         )}
@@ -459,7 +598,46 @@ export function QuickIngredientModal({
                 </div>
               </div>
 
-              {unitType !== "qualitative" ? (
+              {isPresenceUnit(unitType) ? (
+                <div className="rounded-2xl border border-border-subtle bg-canvas p-3.5">
+                  <label className="mb-1 block text-xs font-semibold text-ink-muted">
+                    2. ¿Lo tenés en tu alacena / altar?
+                  </label>
+                  <p className="mb-2.5 text-[11px] text-ink-dim">
+                    Este elemento no es contable ni se gasta al realizar un hechizo.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { value: "plenty", label: "Sí, lo tengo" },
+                        { value: "out", label: "No lo tengo" },
+                      ] as const
+                    ).map((opt) => {
+                      const active =
+                        opt.value === "out"
+                          ? stockLevel === "out"
+                          : stockLevel !== "out";
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setStockLevel(opt.value)}
+                          className={`apple-press flex min-h-11 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${
+                            active
+                              ? opt.value === "out"
+                                ? "border-danger bg-danger-soft text-danger"
+                                : "border-ready bg-ready-soft text-ready"
+                              : "border-border-subtle bg-surface text-ink-muted"
+                          }`}
+                        >
+                          {active && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : unitType !== "qualitative" ? (
                 <div className="rounded-2xl border border-border-subtle bg-canvas p-3.5">
                   <label
                     htmlFor="qi-qty"
@@ -505,7 +683,7 @@ export function QuickIngredientModal({
               ) : (
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-ink-muted">
-                    2. Disponibilidad actual
+                    2. Disponibilidad actual (a ojo)
                   </label>
                   <div className="grid grid-cols-3 gap-2">
                     {(
@@ -545,11 +723,16 @@ export function QuickIngredientModal({
                   htmlFor="qi-cost"
                   className="mb-1.5 block text-xs font-semibold text-ink-muted"
                 >
-                  Costo unitario en ARS por{" "}
-                  {unitType === "qualitative" ? "uso" : unitType} (opcional)
+                  {isPresenceUnit(unitType)
+                    ? "Costo por uso en ARS (opcional, no suele aplicar)"
+                    : `Costo unitario en ARS por ${
+                        unitType === "qualitative" ? "uso" : unitType
+                      } (opcional)`}
                 </label>
                 <p className="mb-3 text-xs text-ink-dim">
-                  Sirve para calcular automáticamente el costo de materiales de cada hechizo. Si no lo tenés ahora, tocá Guardar directamente.
+                  {isPresenceUnit(unitType)
+                    ? "Como es un elemento permanente (cristal, mazo o herramienta) que no se consume en el hechizo, podés dejarlo vacío y tocar Guardar directamente."
+                    : "Sirve para calcular automáticamente el costo de materiales de cada hechizo. Si no lo tenés ahora, tocá Guardar directamente."}
                 </p>
                 <input
                   id="qi-cost"
@@ -568,6 +751,24 @@ export function QuickIngredientModal({
                   }}
                   placeholder="Ej. 500"
                   className="w-full rounded-xl border border-border-subtle bg-surface px-3.5 py-3 tabular-nums text-base font-semibold text-ink placeholder:text-ink-dim outline-none focus:border-accent"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-border-subtle bg-canvas p-4">
+                <label
+                  htmlFor="qi-notes"
+                  className="mb-1.5 block text-xs font-semibold text-ink-muted"
+                >
+                  Notas / Detalles (opcional)
+                </label>
+                <textarea
+                  id="qi-notes"
+                  rows={2}
+                  maxLength={500}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Ej. Proveedor, tipo de mazo, dónde lo guardás..."
+                  className="w-full resize-none rounded-xl border border-border-subtle bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-dim outline-none focus:border-accent"
                 />
               </div>
             </div>
@@ -602,12 +803,18 @@ export function QuickIngredientModal({
 
           <button
             type="button"
-            disabled={createMut.isPending || !name.trim()}
+            disabled={isSaving || !name.trim()}
             onClick={saveIngredient}
             className="apple-press inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-45"
           >
             <Check className="h-4 w-4" aria-hidden="true" />
-            <span>{createMut.isPending ? "Guardando..." : "Guardar"}</span>
+            <span>
+              {isSaving
+                ? "Guardando..."
+                : isEditing
+                  ? "Guardar cambios"
+                  : "Guardar"}
+            </span>
           </button>
         </div>
         </>

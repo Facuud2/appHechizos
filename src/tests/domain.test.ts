@@ -50,7 +50,58 @@ describe("My Bar matching engine", () => {
         stockLevel: "out",
       },
     ],
+    [
+      "ing-cuarzo",
+      {
+        id: "ing-cuarzo",
+        name: "Cuarzo rosa",
+        normalizedName: "cuarzo rosa",
+        unitType: "presence",
+        stockQty: null,
+        lowThreshold: null,
+        stockLevel: "plenty",
+      },
+    ],
+    [
+      "ing-tarot",
+      {
+        id: "ing-tarot",
+        name: "Mazo de Tarot",
+        normalizedName: "mazo de tarot",
+        unitType: "presence",
+        stockQty: null,
+        lowThreshold: null,
+        stockLevel: "out",
+      },
+    ],
   ]);
+
+  it("evaluates presence-based reusable items (crystals, decks) strictly by existence without numeric qty", () => {
+    const res = evaluateVariationAvailability(
+      [
+        {
+          ingredientId: "ing-cuarzo",
+          ingredientName: "Cuarzo rosa",
+          quantity: 1,
+          unit: "unit",
+          isOptional: false,
+        },
+        {
+          ingredientId: "ing-tarot",
+          ingredientName: "Mazo de Tarot",
+          quantity: null,
+          unit: "presence",
+          isOptional: false,
+        },
+      ],
+      inventory
+    );
+
+    expect(res.checks[0].status).toBe("available");
+    expect(res.checks[1].status).toBe("missing");
+    expect(res.tier).toBe("almost");
+    expect(res.missingRequired.map((m) => m.ingredientId)).toEqual(["ing-tarot"]);
+  });
 
   it("marks variation as ready when all required ingredients are available", () => {
     const res = evaluateVariationAvailability(
@@ -169,6 +220,14 @@ describe("Costing & Margin engine", () => {
           unitCostArs: null,
           unitCostUsd: null,
         },
+        {
+          ingredientName: "Cuarzo rosa",
+          quantity: null,
+          unit: "presence",
+          ingredientUnitType: "presence",
+          unitCostArs: null,
+          unitCostUsd: null,
+        },
       ],
       35000
     );
@@ -176,6 +235,7 @@ describe("Costing & Margin engine", () => {
     expect(summary.totalCostArs).toBe(2250);
     expect(summary.marginArs).toBe(32750);
     expect(summary.marginPercent).toBe(93.6);
+    // Reusable presence items (Cuarzo rosa) should not be flagged as missing consumable cost
     expect(summary.missingCostIngredients).toEqual(["Agua lunar"]);
   });
 });
@@ -210,6 +270,15 @@ describe("Stock deduction engine", () => {
         requiredQty: 10,
         requiredUnit: "g",
       },
+      {
+        ingredientId: "ing-cuarzo",
+        currentQty: null,
+        lowThreshold: null,
+        currentLevel: "plenty",
+        ingredientUnitType: "presence",
+        requiredQty: 1,
+        requiredUnit: "presence",
+      },
     ]);
 
     expect(updates[0]).toEqual({
@@ -225,6 +294,12 @@ describe("Stock deduction engine", () => {
       deducted: true,
     });
     expect(updates[2].deducted).toBe(false);
+    expect(updates[3]).toEqual({
+      ingredientId: "ing-cuarzo",
+      nextQty: null,
+      nextLevel: "plenty",
+      deducted: false,
+    });
   });
 });
 
@@ -272,10 +347,10 @@ describe("Smart Bulk Parser (Ingredients & Spells)", () => {
   ];
 
   it("parses free-text bulk ingredients, detects existing stock, and infers units/groups", () => {
-    const raw = `Romero 30g $500, Vela roja 10u $850\nCuarzo rosa 3u $1500\nAgua Florida 100ml`;
+    const raw = `Romero 30g $500, Vela roja 10u $850\nCuarzo rosa\nMazo de Tarot Rider\nAgua Florida 100ml`;
     const drafts = parseBulkIngredientsText(raw, existingIngredients);
 
-    expect(drafts).toHaveLength(4);
+    expect(drafts).toHaveLength(5);
 
     // 1. Existing Romero detected
     expect(drafts[0].name).toBe("Romero");
@@ -293,14 +368,20 @@ describe("Smart Bulk Parser (Ingredients & Spells)", () => {
     expect(drafts[1].stockQty).toBe(10);
     expect(drafts[1].unitCostArs).toBe(850);
 
-    // 3. New Cuarzo rosa inferred as Cristales
+    // 3. New Cuarzo rosa inferred as Cristales + presence (non-countable)
     expect(drafts[2].groupTag).toBe("Cristales");
-    expect(drafts[2].stockQty).toBe(3);
+    expect(drafts[2].unitType).toBe("presence");
+    expect(drafts[2].stockQty).toBeNull();
 
-    // 4. New Agua Florida inferred as Aceites + ml
-    expect(drafts[3].groupTag).toBe("Aceites");
-    expect(drafts[3].unitType).toBe("ml");
-    expect(drafts[3].stockQty).toBe(100);
+    // 4. New Mazo de Tarot inferred as Cartas + presence (non-countable)
+    expect(drafts[3].groupTag).toBe("Cartas");
+    expect(drafts[3].unitType).toBe("presence");
+    expect(drafts[3].stockQty).toBeNull();
+
+    // 5. New Agua Florida inferred as Aceites + ml
+    expect(drafts[4].groupTag).toBe("Aceites");
+    expect(drafts[4].unitType).toBe("ml");
+    expect(drafts[4].stockQty).toBe(100);
   });
 
   it("parses bulk spells with category, dual price, energies, and base recipe ingredients", () => {
