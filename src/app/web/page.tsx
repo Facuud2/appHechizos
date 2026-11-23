@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Globe,
   GripVertical,
+  Layers,
   Loader2,
   Plus,
   RotateCcw,
@@ -139,7 +140,10 @@ export default function WebBuilderPage() {
   // 'edit' = Elementor handles active; 'preview' = clean client view
   const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  // Bottom Sheets (unified across Mobile & PC for zero visual clutter)
+  // Desktop right-panel tab: 'structure' (quick jump + reorder) | 'hidden' (ocultos)
+  const [dockTab, setDockTab] = useState<"structure" | "hidden">("structure");
+
+  // Bottom Sheets (used on mobile for everything, and on desktop for editing/creating)
   const [selected, setSelected] = useState<SelectedElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newCatOpen, setNewCatOpen] = useState(false);
@@ -148,6 +152,7 @@ export default function WebBuilderPage() {
 
   // 1:1 Pointer Drag State
   const [dragState, setDragState] = useState<ActiveDragState | null>(null);
+  const phoneScreenRef = useRef<HTMLDivElement | null>(null);
   const categoryRefs = useRef<Map<string, HTMLElement>>(new Map());
   const spellRefs = useRef<Map<string, HTMLElement>>(new Map());
 
@@ -164,6 +169,12 @@ export default function WebBuilderPage() {
     setIsDirty(false);
     setSelected(null);
     toast.info("Cambios descartados.");
+  }
+
+  function scrollToCategoryInMockup(catId: string) {
+    const el = categoryRefs.current.get(catId);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const canvasCategories = useMemo(() => {
@@ -350,7 +361,7 @@ export default function WebBuilderPage() {
   }
 
   // =========================================================
-  // 1:1 POINTER DRAG ENGINE (SINGLE NATURAL PAGE SCROLL)
+  // 1:1 POINTER DRAG ENGINE (SMART AUTO-SCROLL FOR MOCKUP & MOBILE)
   // =========================================================
   function startPointerDrag(
     e: React.PointerEvent,
@@ -380,7 +391,10 @@ export default function WebBuilderPage() {
       subtitle,
       currentX: e.clientX,
       currentY: e.clientY,
-      grabOffsetX: Math.min(rect.width - 24, Math.max(16, e.clientX - rect.left)),
+      grabOffsetX: Math.min(
+        rect.width - 24,
+        Math.max(16, e.clientX - rect.left)
+      ),
       grabOffsetY: Math.min(48, Math.max(16, e.clientY - rect.top)),
       width: Math.min(340, Math.max(240, rect.width)),
     });
@@ -394,12 +408,26 @@ export default function WebBuilderPage() {
         prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null
       );
 
-      // Gentle window auto-scroll near viewport top/bottom edges
-      const vh = window.innerHeight;
-      if (e.clientY < 80) {
-        window.scrollBy({ top: -10 });
-      } else if (e.clientY > vh - 90) {
-        window.scrollBy({ top: 10 });
+      // Auto-scroll: if inside Desktop iPhone Mockup scroll container, scroll it;
+      // otherwise (Mobile natural flow), scroll window!
+      const screenEl = phoneScreenRef.current;
+      const isMockupScrollable =
+        screenEl && screenEl.scrollHeight > screenEl.clientHeight + 8;
+
+      if (isMockupScrollable && screenEl) {
+        const sr = screenEl.getBoundingClientRect();
+        if (e.clientY < sr.top + 60) {
+          screenEl.scrollBy({ top: -12 });
+        } else if (e.clientY > sr.bottom - 60) {
+          screenEl.scrollBy({ top: 12 });
+        }
+      } else {
+        const vh = window.innerHeight;
+        if (e.clientY < 80) {
+          window.scrollBy({ top: -10 });
+        } else if (e.clientY > vh - 90) {
+          window.scrollBy({ top: 10 });
+        }
       }
 
       if (dragState?.kind === "category") {
@@ -597,10 +625,11 @@ export default function WebBuilderPage() {
 
   return (
     <AppShell>
-      {/* Centered Single-Column Mobile-First Workspace (identical on PC & Mobile!) */}
-      <div className="mx-auto w-full max-w-[430px] pb-20">
-        {/* 1. Compact Header (Congruent with Home / Stock / Explorar) */}
-        <header className="mb-3 flex items-center justify-between gap-2">
+      {/* On Desktop (md+): viewport-fitted studio with ZERO infinite page scroll!
+          On Mobile (<md): clean natural single-scroll mobile view */}
+      <div className="mx-auto w-full max-w-[430px] pb-20 md:flex md:h-[calc(100dvh-56px)] md:max-w-[960px] md:flex-col md:overflow-hidden md:pb-0">
+        {/* 1. Compact Header */}
+        <header className="mb-3 flex shrink-0 items-center justify-between gap-2">
           <div className="min-w-0">
             <h1 className="display-heading truncate text-[26px] font-bold tracking-[-0.02em] text-ink sm:text-[28px]">
               Web Pública
@@ -614,6 +643,18 @@ export default function WebBuilderPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
+            {isDirty && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleDiscard}
+                className="apple-press hidden h-10 items-center gap-1 rounded-[12px] border border-border-subtle bg-surface px-3 text-xs font-semibold text-ink-muted hover:border-border-strong hover:text-ink md:inline-flex"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Descartar</span>
+              </button>
+            )}
+
             <a
               href="https://tarotdeluna.netlify.app"
               target="_blank"
@@ -636,7 +677,10 @@ export default function WebBuilderPage() {
               }`}
             >
               {saving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                <Loader2
+                  className="h-3.5 w-3.5 animate-spin"
+                  aria-hidden="true"
+                />
               ) : (
                 <UploadCloud className="h-3.5 w-3.5" aria-hidden="true" />
               )}
@@ -651,15 +695,18 @@ export default function WebBuilderPage() {
           </div>
         </header>
 
-        {/* 2. Single Compact Control Bar (Zero stacked toolbars) */}
-        <div className="mb-3 flex items-center justify-between gap-1.5">
+        {/* 2. Mobile-only Compact Control Bar (Desktop has the side dock) */}
+        <div className="mb-3 flex items-center justify-between gap-1.5 md:hidden">
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setNewCatOpen(true)}
               className="apple-press inline-flex h-9 items-center gap-1 rounded-[10px] border border-border-subtle bg-surface px-2.5 text-xs font-semibold text-ink hover:border-accent hover:text-accent-text"
             >
-              <FolderPlus className="h-3.5 w-3.5 text-accent-text" aria-hidden="true" />
+              <FolderPlus
+                className="h-3.5 w-3.5 text-accent-text"
+                aria-hidden="true"
+              />
               <span>Categoría</span>
             </button>
 
@@ -673,7 +720,6 @@ export default function WebBuilderPage() {
             </button>
           </div>
 
-          {/* Clean Edit / Preview Segmented Toggle */}
           <div
             role="tablist"
             aria-label="Modo de vista"
@@ -709,437 +755,668 @@ export default function WebBuilderPage() {
           </div>
         </div>
 
-        {/* Subtle 1-line helper in edit mode */}
-        {mode === "edit" && (
-          <p className="mb-2.5 px-1 text-[11.5px] text-ink-dim">
-            Arrastrá desde{" "}
-            <GripVertical className="inline h-3.5 w-3.5 text-ink-muted" /> para
-            reordenar · Tocá cualquier título o hechizo para editarlo.
-          </p>
-        )}
-
-        {/* 3. DIRECT MOBILE CANVAS (NO INNER SCROLL! Natural single page flow) */}
+        {/* 3. MAIN WORKSPACE:
+            - Mobile: Natural flow card
+            - Desktop (md+): Sleek iPhone Device Mockup (left/center) + Fixed-height Control Dock (right) */}
         {isLoading && !data ? (
           <HomeGrimorioSkeleton includeStatusAndFilters={false} />
         ) : (
-          <div
-            style={{
-              background:
-                "radial-gradient(circle at 50% 0%, #442725 0%, #1c1313 100%)",
-            }}
-            className="w-full overflow-hidden rounded-[24px] p-2.5 shadow-md sm:p-3.5"
-          >
-            {/* Compact Carrd Hero (@eltarotde_luna) */}
-            <div
-              style={{
-                background:
-                  "linear-gradient(135deg, #3c2220 0%, #231716 100%)",
-              }}
-              className="relative mb-2 flex h-[78px] w-full items-end justify-between overflow-hidden rounded-t-[18px] rounded-b-[12px] px-4 py-3 shadow-sm"
-            >
-              <span className="relative z-10 text-[17px] font-semibold tracking-[-0.01em] text-[#fbf9f5]">
-                @eltarotde_luna
-              </span>
-              <div
-                style={{ backgroundColor: "#e6cbc8", color: "#8c2d29" }}
-                className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M12 3.2 3 10.7h2.6V20h5v-5.3h2.8V20h5v-9.3H21L12 3.2z" />
-                </svg>
+          <div className="md:flex md:min-h-0 md:flex-1 md:items-stretch md:justify-center md:gap-7">
+            {/* =======================================================
+                IPHONE DEVICE MOCKUP FRAME (Desktop) / NATURAL CANVAS (Mobile)
+               ======================================================= */}
+            <div className="w-full md:flex md:w-[392px] md:shrink-0 md:flex-col md:overflow-hidden md:rounded-[44px] md:border-[8px] md:border-[#1c1f26] md:bg-[#1c1313] md:shadow-2xl dark:md:border-[#2a2f3b]">
+              {/* Desktop iPhone Top Status Bar + Dynamic Island */}
+              <div className="hidden shrink-0 items-center justify-between bg-[#251716] px-6 pt-2.5 pb-2 text-[11px] font-semibold text-[#fbf9f5]/90 md:flex">
+                <span className="tabular-nums">9:41</span>
+                <div className="h-[22px] w-[86px] rounded-full bg-black/90" />
+                <span className="text-[10px] tracking-tight opacity-80">
+                  5G · 100%
+                </span>
               </div>
-            </div>
 
-            {/* Carrd Cream Card Body (#f7f3eb) */}
-            <div
-              style={{
-                backgroundColor: "#f7f3eb",
-                color: "#231d1b",
-              }}
-              className="w-full overflow-hidden rounded-[18px]"
-            >
-              <div className="p-3.5 sm:p-4">
-                {/* # Hechizos Title */}
+              {/* Scrollable Screen Inside Phone Mockup on Desktop / Natural Flow on Mobile */}
+              <div
+                ref={phoneScreenRef}
+                style={{
+                  background:
+                    "radial-gradient(circle at 50% 0%, #442725 0%, #1c1313 100%)",
+                }}
+                className="scroll-contain w-full overflow-hidden rounded-[24px] p-2.5 shadow-md sm:p-3.5 md:min-h-0 md:flex-1 md:overflow-y-auto md:rounded-none md:p-3 md:shadow-none"
+              >
+                {/* Compact Carrd Hero (@eltarotde_luna) */}
                 <div
                   style={{
-                    borderBottom: "1.5px solid rgba(140, 45, 41, 0.35)",
+                    background:
+                      "linear-gradient(135deg, #3c2220 0%, #231716 100%)",
                   }}
-                  className="mb-3.5 flex items-center justify-between pb-2"
+                  className="relative mb-2 flex h-[76px] w-full items-end justify-between overflow-hidden rounded-t-[18px] rounded-b-[12px] px-4 py-3 shadow-sm"
                 >
-                  <h2
-                    style={{ color: "#8c2d29" }}
-                    className="text-[16px] font-bold underline underline-offset-4"
-                  >
-                    # Hechizos
-                  </h2>
-                  <span
-                    style={{ color: "#8c2d29" }}
-                    className="text-[11px] font-semibold opacity-70 tabular-nums"
-                  >
-                    {totalPublishedCount}{" "}
-                    {totalPublishedCount === 1 ? "ritual" : "rituales"}
+                  <span className="relative z-10 text-[16.5px] font-semibold tracking-[-0.01em] text-[#fbf9f5]">
+                    @eltarotde_luna
                   </span>
+                  <div
+                    style={{ backgroundColor: "#e6cbc8", color: "#8c2d29" }}
+                    className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M12 3.2 3 10.7h2.6V20h5v-5.3h2.8V20h5v-9.3H21L12 3.2z" />
+                    </svg>
+                  </div>
                 </div>
 
-                {/* Categories List */}
-                <div className="space-y-5">
-                  {canvasCategories.map(
-                    ({ category, publishedSpells, hiddenSpells }, catIdx) => {
-                      if (mode === "preview" && publishedSpells.length === 0) {
-                        return null;
-                      }
+                {/* Carrd Cream Card Body (#f7f3eb) */}
+                <div
+                  style={{
+                    backgroundColor: "#f7f3eb",
+                    color: "#231d1b",
+                  }}
+                  className="w-full overflow-hidden rounded-[18px]"
+                >
+                  <div className="p-3.5">
+                    {/* # Hechizos Title */}
+                    <div
+                      style={{
+                        borderBottom: "1.5px solid rgba(140, 45, 41, 0.35)",
+                      }}
+                      className="mb-3.5 flex items-center justify-between pb-2"
+                    >
+                      <h2
+                        style={{ color: "#8c2d29" }}
+                        className="text-[15.5px] font-bold underline underline-offset-4"
+                      >
+                        # Hechizos
+                      </h2>
+                      <span
+                        style={{ color: "#8c2d29" }}
+                        className="text-[11px] font-semibold opacity-70 tabular-nums"
+                      >
+                        {totalPublishedCount}{" "}
+                        {totalPublishedCount === 1 ? "ritual" : "rituales"}
+                      </span>
+                    </div>
 
-                      const isCatDragging =
-                        dragState?.kind === "category" &&
-                        dragState.id === category.id;
+                    {/* Categories List */}
+                    <div className="space-y-4">
+                      {canvasCategories.map(
+                        ({ category, publishedSpells, hiddenSpells }) => {
+                          if (
+                            mode === "preview" &&
+                            publishedSpells.length === 0
+                          ) {
+                            return null;
+                          }
 
-                      return (
-                        <section
-                          key={category.id}
-                          ref={(el) => {
-                            if (el) categoryRefs.current.set(category.id, el);
-                            else categoryRefs.current.delete(category.id);
-                          }}
-                          style={{
-                            opacity: isCatDragging ? 0.3 : 1,
-                            border:
-                              mode === "edit"
-                                ? "1px dashed rgba(140, 45, 41, 0.28)"
-                                : "none",
-                          }}
-                          className={`min-w-0 transition-opacity duration-150 ${
-                            mode === "edit"
-                              ? "rounded-[14px] bg-white/35 p-2.5"
-                              : ""
-                          }`}
-                        >
-                          {/* Category Header Row */}
-                          <div className="mb-2 flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 flex-1 items-start gap-1.5">
-                              {mode === "edit" && (
-                                <button
-                                  type="button"
-                                  onPointerDown={(e) =>
-                                    startPointerDrag(
-                                      e,
-                                      "category",
-                                      category.id,
-                                      category.name,
-                                      categoryRefs.current.get(category.id) ??
-                                        null,
-                                      `${publishedSpells.length} visibles`
-                                    )
-                                  }
-                                  style={{
-                                    touchAction: "none",
-                                    color: "#8c2d29",
-                                  }}
-                                  aria-label={`Arrastrar categoría ${category.name}`}
-                                  title="Arrastrar para reordenar categoría"
-                                  className="hit-44 mt-0.5 flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-md bg-[#8c2d29]/10 active:cursor-grabbing"
-                                >
-                                  <GripVertical className="h-3.5 w-3.5" />
-                                </button>
-                              )}
+                          const isCatDragging =
+                            dragState?.kind === "category" &&
+                            dragState.id === category.id;
 
-                              <button
-                                type="button"
-                                disabled={mode === "preview"}
-                                onClick={() =>
-                                  setSelected({
-                                    type: "category",
-                                    id: category.id,
-                                  })
-                                }
-                                className="min-w-0 flex-1 text-left"
-                              >
-                                <h3
-                                  style={{ color: "#8c2d29" }}
-                                  className="break-words text-[15px] font-bold leading-snug underline underline-offset-4"
-                                >
-                                  {category.name}
-                                </h3>
-                              </button>
-                            </div>
-
-                            {mode === "edit" && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setSelected({
-                                    type: "category",
-                                    id: category.id,
-                                  })
-                                }
-                                aria-label={`Editar ${category.name}`}
-                                style={{ color: "#8c2d29" }}
-                                className="hit-44 flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-[#8c2d29]/10 hover:opacity-100"
-                              >
-                                <Edit3 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </div>
-
-                          {category.publicIntro && (
-                            <p
-                              style={{ color: "#5a2220" }}
-                              className="mb-2.5 break-words text-[13px] leading-[1.45]"
-                            >
-                              {category.publicIntro}
-                            </p>
-                          )}
-
-                          {/* Spells inside Category */}
-                          {publishedSpells.length === 0 ? (
-                            <div
-                              style={{
-                                color: "#8c2d29",
-                                borderColor: "rgba(140, 45, 41, 0.22)",
+                          return (
+                            <section
+                              key={category.id}
+                              ref={(el) => {
+                                if (el)
+                                  categoryRefs.current.set(category.id, el);
+                                else categoryRefs.current.delete(category.id);
                               }}
-                              className="rounded-xl border border-dashed bg-white/45 px-3 py-2.5 text-center text-[11.5px]"
+                              style={{
+                                opacity: isCatDragging ? 0.3 : 1,
+                                border:
+                                  mode === "edit"
+                                    ? "1px dashed rgba(140, 45, 41, 0.28)"
+                                    : "none",
+                              }}
+                              className={`min-w-0 scroll-mt-3 transition-opacity duration-150 ${
+                                mode === "edit"
+                                  ? "rounded-[14px] bg-white/35 p-2.5"
+                                  : ""
+                              }`}
                             >
-                              <p className="font-medium opacity-80">
-                                Sin hechizos visibles · Arrastrá uno aquí
-                              </p>
-                              {hiddenSpells.length > 0 && (
-                                <div className="mt-2 flex flex-wrap justify-center gap-1">
-                                  {hiddenSpells.slice(0, 4).map((hs) => (
+                              {/* Category Header Row */}
+                              <div className="mb-2 flex items-start justify-between gap-2">
+                                <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                                  {mode === "edit" && (
                                     <button
-                                      key={hs.id}
                                       type="button"
-                                      onClick={() =>
-                                        updateSpellDraft(hs.id, {
-                                          isPublished: true,
-                                        })
+                                      onPointerDown={(e) =>
+                                        startPointerDrag(
+                                          e,
+                                          "category",
+                                          category.id,
+                                          category.name,
+                                          categoryRefs.current.get(
+                                            category.id
+                                          ) ?? null,
+                                          `${publishedSpells.length} visibles`
+                                        )
                                       }
                                       style={{
-                                        backgroundColor: "#e6cbc8",
+                                        touchAction: "none",
                                         color: "#8c2d29",
                                       }}
-                                      className="inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                                      aria-label={`Arrastrar categoría ${category.name}`}
+                                      title="Arrastrar para reordenar categoría"
+                                      className="hit-44 mt-0.5 flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-md bg-[#8c2d29]/10 active:cursor-grabbing"
                                     >
-                                      <Plus className="h-3 w-3 shrink-0" />
-                                      <span className="truncate">
-                                        {hs.title}
-                                      </span>
+                                      <GripVertical className="h-3.5 w-3.5" />
                                     </button>
-                                  ))}
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    disabled={mode === "preview"}
+                                    onClick={() =>
+                                      setSelected({
+                                        type: "category",
+                                        id: category.id,
+                                      })
+                                    }
+                                    className="min-w-0 flex-1 text-left"
+                                  >
+                                    <h3
+                                      style={{ color: "#8c2d29" }}
+                                      className="break-words text-[14.5px] font-bold leading-snug underline underline-offset-4"
+                                    >
+                                      {category.name}
+                                    </h3>
+                                  </button>
+                                </div>
+
+                                {mode === "edit" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelected({
+                                        type: "category",
+                                        id: category.id,
+                                      })
+                                    }
+                                    aria-label={`Editar ${category.name}`}
+                                    style={{ color: "#8c2d29" }}
+                                    className="hit-44 flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-70 hover:bg-[#8c2d29]/10 hover:opacity-100"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+
+                              {category.publicIntro && (
+                                <p
+                                  style={{ color: "#5a2220" }}
+                                  className="mb-2.5 break-words text-[12.5px] leading-[1.45]"
+                                >
+                                  {category.publicIntro}
+                                </p>
+                              )}
+
+                              {/* Spells inside Category */}
+                              {publishedSpells.length === 0 ? (
+                                <div
+                                  style={{
+                                    color: "#8c2d29",
+                                    borderColor: "rgba(140, 45, 41, 0.22)",
+                                  }}
+                                  className="rounded-xl border border-dashed bg-white/45 px-2.5 py-2 text-center text-[11px]"
+                                >
+                                  <p className="font-medium opacity-80">
+                                    Sin hechizos visibles · Arrastrá uno aquí
+                                  </p>
+                                  {hiddenSpells.length > 0 && (
+                                    <div className="mt-1.5 flex flex-wrap justify-center gap-1">
+                                      {hiddenSpells.slice(0, 3).map((hs) => (
+                                        <button
+                                          key={hs.id}
+                                          type="button"
+                                          onClick={() =>
+                                            updateSpellDraft(hs.id, {
+                                              isPublished: true,
+                                            })
+                                          }
+                                          style={{
+                                            backgroundColor: "#e6cbc8",
+                                            color: "#8c2d29",
+                                          }}
+                                          className="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold"
+                                        >
+                                          <Plus className="h-2.5 w-2.5 shrink-0" />
+                                          <span className="truncate">
+                                            {hs.title}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="divide-y divide-[#8c2d29]/15">
+                                  {publishedSpells.map((spell) => {
+                                    const isSpellDragging =
+                                      dragState?.kind === "spell" &&
+                                      dragState.id === spell.id;
+                                    const desc =
+                                      spell.publicDescription ||
+                                      spell.purpose ||
+                                      null;
+
+                                    return (
+                                      <article
+                                        key={spell.id}
+                                        ref={(el) => {
+                                          if (el)
+                                            spellRefs.current.set(spell.id, el);
+                                          else
+                                            spellRefs.current.delete(spell.id);
+                                        }}
+                                        style={{
+                                          opacity: isSpellDragging ? 0.25 : 1,
+                                        }}
+                                        className="flex min-w-0 items-start gap-1.5 py-2.5 first:pt-1 last:pb-0"
+                                      >
+                                        {mode === "edit" && (
+                                          <button
+                                            type="button"
+                                            onPointerDown={(e) =>
+                                              startPointerDrag(
+                                                e,
+                                                "spell",
+                                                spell.id,
+                                                spell.title,
+                                                spellRefs.current.get(
+                                                  spell.id
+                                                ) ?? null,
+                                                spell.priceTiers[0]
+                                                  ? formatPublicPriceLine(
+                                                      spell.priceTiers[0].label,
+                                                      spell.priceTiers[0]
+                                                        .priceArs,
+                                                      spell.priceTiers[0]
+                                                        .priceUsd
+                                                    )
+                                                  : undefined
+                                              )
+                                            }
+                                            style={{
+                                              touchAction: "none",
+                                              color: "#8c2d29",
+                                            }}
+                                            aria-label={`Arrastrar ${spell.title}`}
+                                            title="Arrastrar para mover posición o categoría"
+                                            className="hit-44 mt-0.5 flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-md hover:bg-[#8c2d29]/10 active:cursor-grabbing"
+                                          >
+                                            <GripVertical className="h-4 w-4 opacity-70" />
+                                          </button>
+                                        )}
+
+                                        <button
+                                          type="button"
+                                          disabled={mode === "preview"}
+                                          onClick={() =>
+                                            setSelected({
+                                              type: "spell",
+                                              id: spell.id,
+                                            })
+                                          }
+                                          className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
+                                        >
+                                          <h4
+                                            style={{ color: "#8c2d29" }}
+                                            className="break-words text-[14px] font-bold leading-snug"
+                                          >
+                                            {spell.title}
+                                          </h4>
+
+                                          {spell.subtitleTag && (
+                                            <span
+                                              style={{ color: "#385766" }}
+                                              className="break-words text-[11.5px] font-semibold italic leading-snug"
+                                            >
+                                              {spell.subtitleTag}
+                                            </span>
+                                          )}
+
+                                          {desc && (
+                                            <p
+                                              style={{ color: "#5a2220" }}
+                                              className="break-words text-[12.5px] leading-[1.42]"
+                                            >
+                                              {desc}
+                                            </p>
+                                          )}
+
+                                          {spell.priceTiers.length > 0 && (
+                                            <div className="mt-0.5 flex flex-col gap-0.5">
+                                              {spell.priceTiers.map(
+                                                (price, pIdx) => (
+                                                  <span
+                                                    key={`${spell.id}-p-${pIdx}`}
+                                                    style={{ color: "#4d1917" }}
+                                                    className="inline-flex flex-wrap items-center gap-1.5 text-[12.5px] font-bold italic"
+                                                  >
+                                                    <span>
+                                                      {formatPublicPriceLine(
+                                                        price.label,
+                                                        price.priceArs,
+                                                        price.priceUsd
+                                                      )}
+                                                    </span>
+                                                    {spell.isOffer &&
+                                                      pIdx === 0 && (
+                                                        <span
+                                                          style={{
+                                                            backgroundColor:
+                                                              "#8c2d29",
+                                                            color: "#fbf9f5",
+                                                          }}
+                                                          className="rounded-full px-2 py-0.5 text-[9.5px] font-bold not-italic tracking-wider"
+                                                        >
+                                                          {spell.offerLabel ||
+                                                            "¡OFERTA!"}
+                                                        </span>
+                                                      )}
+                                                  </span>
+                                                )
+                                              )}
+                                            </div>
+                                          )}
+                                        </button>
+
+                                        {mode === "edit" && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              updateSpellDraft(spell.id, {
+                                                isPublished: false,
+                                              })
+                                            }
+                                            aria-label={`Ocultar ${spell.title} de la web`}
+                                            title="Ocultar de la web"
+                                            style={{ color: "#8c2d29" }}
+                                            className="hit-44 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-55 hover:bg-[#8c2d29]/10 hover:opacity-100"
+                                          >
+                                            <EyeOff className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                      </article>
+                                    );
+                                  })}
                                 </div>
                               )}
-                            </div>
-                          ) : (
-                            <div className="divide-y divide-[#8c2d29]/15">
-                              {publishedSpells.map((spell) => {
-                                const isSpellDragging =
-                                  dragState?.kind === "spell" &&
-                                  dragState.id === spell.id;
-                                const desc =
-                                  spell.publicDescription ||
-                                  spell.purpose ||
-                                  null;
+                            </section>
+                          );
+                        }
+                      )}
 
-                                return (
-                                  <article
-                                    key={spell.id}
-                                    ref={(el) => {
-                                      if (el) spellRefs.current.set(spell.id, el);
-                                      else spellRefs.current.delete(spell.id);
-                                    }}
-                                    style={{
-                                      opacity: isSpellDragging ? 0.25 : 1,
-                                    }}
-                                    className="flex min-w-0 items-start gap-2 py-2.5 first:pt-1 last:pb-0"
-                                  >
-                                    {/* Left Drag Handle (only in Edit mode) */}
-                                    {mode === "edit" && (
-                                      <button
-                                        type="button"
-                                        onPointerDown={(e) =>
-                                          startPointerDrag(
-                                            e,
-                                            "spell",
-                                            spell.id,
-                                            spell.title,
-                                            spellRefs.current.get(spell.id) ??
-                                              null,
-                                            spell.priceTiers[0]
-                                              ? formatPublicPriceLine(
-                                                  spell.priceTiers[0].label,
-                                                  spell.priceTiers[0].priceArs,
-                                                  spell.priceTiers[0].priceUsd
-                                                )
-                                              : undefined
-                                          )
-                                        }
-                                        style={{
-                                          touchAction: "none",
-                                          color: "#8c2d29",
-                                        }}
-                                        aria-label={`Arrastrar ${spell.title}`}
-                                        title="Arrastrar para mover posición o categoría"
-                                        className="hit-44 mt-0.5 flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded-md hover:bg-[#8c2d29]/10 active:cursor-grabbing"
-                                      >
-                                        <GripVertical className="h-4 w-4 opacity-70" />
-                                      </button>
-                                    )}
-
-                                    {/* Center Content: Tap to inspect/edit */}
-                                    <button
-                                      type="button"
-                                      disabled={mode === "preview"}
-                                      onClick={() =>
-                                        setSelected({
-                                          type: "spell",
-                                          id: spell.id,
-                                        })
-                                      }
-                                      className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
-                                    >
-                                      <h4
-                                        style={{ color: "#8c2d29" }}
-                                        className="break-words text-[14.5px] font-bold leading-snug"
-                                      >
-                                        {spell.title}
-                                      </h4>
-
-                                      {spell.subtitleTag && (
-                                        <span
-                                          style={{ color: "#385766" }}
-                                          className="break-words text-[12px] font-semibold italic leading-snug"
-                                        >
-                                          {spell.subtitleTag}
-                                        </span>
-                                      )}
-
-                                      {desc && (
-                                        <p
-                                          style={{ color: "#5a2220" }}
-                                          className="break-words text-[13px] leading-[1.42]"
-                                        >
-                                          {desc}
-                                        </p>
-                                      )}
-
-                                      {spell.priceTiers.length > 0 && (
-                                        <div className="mt-0.5 flex flex-col gap-0.5">
-                                          {spell.priceTiers.map(
-                                            (price, pIdx) => (
-                                              <span
-                                                key={`${spell.id}-p-${pIdx}`}
-                                                style={{ color: "#4d1917" }}
-                                                className="inline-flex flex-wrap items-center gap-1.5 text-[13px] font-bold italic"
-                                              >
-                                                <span>
-                                                  {formatPublicPriceLine(
-                                                    price.label,
-                                                    price.priceArs,
-                                                    price.priceUsd
-                                                  )}
-                                                </span>
-                                                {spell.isOffer && pIdx === 0 && (
-                                                  <span
-                                                    style={{
-                                                      backgroundColor:
-                                                        "#8c2d29",
-                                                      color: "#fbf9f5",
-                                                    }}
-                                                    className="rounded-full px-2 py-0.5 text-[10px] font-bold not-italic tracking-wider"
-                                                  >
-                                                    {spell.offerLabel ||
-                                                      "¡OFERTA!"}
-                                                  </span>
-                                                )}
-                                              </span>
-                                            )
-                                          )}
-                                        </div>
-                                      )}
-                                    </button>
-
-                                    {/* Right Quick Hide Icon (only in Edit mode) */}
-                                    {mode === "edit" && (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          updateSpellDraft(spell.id, {
-                                            isPublished: false,
-                                          })
-                                        }
-                                        aria-label={`Ocultar ${spell.title} de la web`}
-                                        title="Ocultar de la web"
-                                        style={{ color: "#8c2d29" }}
-                                        className="hit-44 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-55 hover:bg-[#8c2d29]/10 hover:opacity-100"
-                                      >
-                                        <EyeOff className="h-3.5 w-3.5" />
-                                      </button>
-                                    )}
-                                  </article>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </section>
-                      );
-                    }
-                  )}
-
-                  {mode === "preview" && totalPublishedCount === 0 && (
-                    <div className="py-8 text-center">
-                      <Sparkles
-                        style={{ color: "#8c2d29" }}
-                        className="mx-auto mb-2 h-5 w-5 opacity-70"
-                      />
-                      <p
-                        style={{ color: "#5a2220" }}
-                        className="text-xs font-medium"
-                      >
-                        No hay hechizos públicos todavía.
-                      </p>
+                      {mode === "preview" && totalPublishedCount === 0 && (
+                        <div className="py-6 text-center">
+                          <Sparkles
+                            style={{ color: "#8c2d29" }}
+                            className="mx-auto mb-2 h-5 w-5 opacity-70"
+                          />
+                          <p
+                            style={{ color: "#5a2220" }}
+                            className="text-xs font-medium"
+                          >
+                            No hay hechizos públicos todavía.
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Carrd Footer Bar */}
+                  <div
+                    style={{
+                      backgroundColor: "#e6cbc8",
+                      color: "#8c2d29",
+                      borderTop: "1px solid rgba(140, 45, 41, 0.15)",
+                    }}
+                    className="flex items-center justify-between px-4 py-2.5 text-[12.5px] font-semibold"
+                  >
+                    <span>@eltarotde_luna</span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        style={{ backgroundColor: "#f7f3eb" }}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-[11px]"
+                      >
+                        𝕏
+                      </span>
+                      <span
+                        style={{ backgroundColor: "#f7f3eb" }}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-[11px]"
+                      >
+                        IG
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Carrd Footer Bar */}
-              <div
-                style={{
-                  backgroundColor: "#e6cbc8",
-                  color: "#8c2d29",
-                  borderTop: "1px solid rgba(140, 45, 41, 0.15)",
-                }}
-                className="flex items-center justify-between px-4 py-2.5 text-[13px] font-semibold"
-              >
-                <span>@eltarotde_luna</span>
-                <div className="flex items-center gap-1.5">
-                  <span
-                    style={{ backgroundColor: "#f7f3eb" }}
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-[11px]"
-                  >
-                    𝕏
-                  </span>
-                  <span
-                    style={{ backgroundColor: "#f7f3eb" }}
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-[11px]"
-                  >
-                    IG
-                  </span>
-                </div>
+              {/* Desktop iPhone Bottom Home Indicator */}
+              <div className="hidden shrink-0 items-center justify-center bg-[#1c1313] py-2 md:flex">
+                <div className="h-1 w-28 rounded-full bg-white/30" />
               </div>
             </div>
+
+            {/* =======================================================
+                DESKTOP SIDE CONTROL DOCK (Compact, viewport-fitted, zero page scroll)
+               ======================================================= */}
+            <aside className="hidden md:flex md:min-h-0 md:w-[340px] md:flex-col md:gap-3 lg:w-[380px]">
+              {/* Mode Switch + New Category Card */}
+              <div className="shrink-0 space-y-2.5 rounded-[18px] border border-border-subtle bg-surface p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    role="tablist"
+                    aria-label="Modo de vista en mockup"
+                    className="grid flex-1 grid-cols-2 rounded-[10px] border border-border-subtle bg-canvas p-0.5"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={mode === "edit"}
+                      onClick={() => setMode("edit")}
+                      className={`rounded-[8px] py-1.5 text-xs font-semibold transition-colors ${
+                        mode === "edit"
+                          ? "bg-accent text-on-accent"
+                          : "text-ink-muted hover:text-ink"
+                      }`}
+                    >
+                      Modo Editar
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={mode === "preview"}
+                      onClick={() => setMode("preview")}
+                      className={`inline-flex items-center justify-center gap-1 rounded-[8px] py-1.5 text-xs font-semibold transition-colors ${
+                        mode === "preview"
+                          ? "bg-accent text-on-accent"
+                          : "text-ink-muted hover:text-ink"
+                      }`}
+                    >
+                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Vista Cliente</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewCatOpen(true)}
+                    className="apple-press inline-flex h-9 shrink-0 items-center gap-1 rounded-[10px] bg-accent-soft px-3 text-xs font-semibold text-accent-text hover:bg-accent hover:text-on-accent"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>+ Categoría</span>
+                  </button>
+                </div>
+
+                <p className="text-[11.5px] leading-snug text-ink-muted">
+                  Arrastrá desde{" "}
+                  <GripVertical className="inline h-3.5 w-3.5 text-ink" />{" "}
+                  dentro del celular para reordenar categorías o mover hechizos.
+                  Tocá cualquier elemento para editarlo.
+                </p>
+              </div>
+
+              {/* Dock Panel: Structure Navigator vs Hidden Spells */}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-border-subtle bg-surface">
+                <div className="grid shrink-0 grid-cols-2 border-b border-border-subtle bg-canvas/60 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setDockTab("structure")}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] py-2 text-xs font-semibold transition-colors ${
+                      dockTab === "structure"
+                        ? "bg-surface text-ink shadow-2xs"
+                        : "text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    <Layers className="h-3.5 w-3.5 text-accent-text" />
+                    <span>Categorías ({draftCategories.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDockTab("hidden")}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] py-2 text-xs font-semibold transition-colors ${
+                      dockTab === "hidden"
+                        ? "bg-surface text-ink shadow-2xs"
+                        : "text-ink-muted hover:text-ink"
+                    }`}
+                  >
+                    <EyeOff className="h-3.5 w-3.5 text-info" />
+                    <span>Ocultos ({privateSpells.length})</span>
+                  </button>
+                </div>
+
+                <div className="scroll-contain min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3">
+                  {dockTab === "structure" ? (
+                    canvasCategories.map(({ category, publishedSpells }, idx) => (
+                      <div
+                        key={category.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas px-2.5 py-2 transition hover:border-border-strong"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => scrollToCategoryInMockup(category.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <p className="truncate text-xs font-semibold text-ink">
+                            {idx + 1}. {category.name}
+                          </p>
+                          <p className="text-[11px] text-ink-muted tabular-nums">
+                            {publishedSpells.length}{" "}
+                            {publishedSpells.length === 1
+                              ? "hechizo visible"
+                              : "hechizos visibles"}
+                          </p>
+                        </button>
+
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => moveCategoryByIndex(idx, idx - 1)}
+                            aria-label={`Subir ${category.name}`}
+                            className="apple-press flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted hover:bg-surface hover:text-ink disabled:opacity-30"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx >= draftCategories.length - 1}
+                            onClick={() => moveCategoryByIndex(idx, idx + 1)}
+                            aria-label={`Bajar ${category.name}`}
+                            className="apple-press flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted hover:bg-surface hover:text-ink disabled:opacity-30"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelected({ type: "category", id: category.id })
+                            }
+                            aria-label={`Editar ${category.name}`}
+                            className="apple-press flex h-7 w-7 items-center justify-center rounded-lg text-ink-muted hover:bg-surface hover:text-accent-text"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : privateSpells.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-ink-muted">
+                      ¡Todos tus hechizos están publicados en la web!
+                    </p>
+                  ) : (
+                    privateSpells.map((sp) => (
+                      <div
+                        key={sp.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border-subtle bg-canvas p-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-ink">
+                            {sp.title}
+                          </p>
+                          <select
+                            aria-label={`Categoría para ${sp.title}`}
+                            value={
+                              sp.categoryId ?? draftCategories[0]?.id ?? ""
+                            }
+                            onChange={(e) =>
+                              updateSpellDraft(sp.id, {
+                                categoryId: e.target.value || null,
+                                isPublished: false,
+                              })
+                            }
+                            className="mt-1 h-7 w-full rounded-lg border border-border-subtle bg-surface px-1.5 text-[11px] text-ink-muted outline-none"
+                          >
+                            {draftCategories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const targetCat =
+                              sp.categoryId ?? draftCategories[0]?.id ?? "";
+                            if (targetCat) {
+                              const count = draftSpells.filter(
+                                (s) =>
+                                  s.categoryId === targetCat && s.isPublished
+                              ).length;
+                              moveSpellToPosition(sp.id, targetCat, count);
+                              scrollToCategoryInMockup(targetCat);
+                            } else {
+                              updateSpellDraft(sp.id, { isPublished: true });
+                            }
+                            toast.success(`"${sp.title}" sumado al mockup.`);
+                          }}
+                          className="apple-press inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-accent px-2.5 text-xs font-semibold text-on-accent"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Sumar</span>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </aside>
           </div>
         )}
       </div>
 
       {/* =========================================================
-          STICKY FLOATING PUBLISH PILL (ONLY WHEN DIRTY)
+          MOBILE STICKY FLOATING PUBLISH PILL (ONLY WHEN DIRTY)
          ========================================================= */}
       {isDirty && (
-        <div className="fixed bottom-[74px] left-1/2 z-30 w-[calc(100%-32px)] max-w-[400px] -translate-x-1/2 md:bottom-6">
+        <div className="fixed bottom-[74px] left-1/2 z-30 w-[calc(100%-32px)] max-w-[400px] -translate-x-1/2 md:hidden">
           <div className="apple-chrome animate-pill-enter flex items-center justify-between gap-2 rounded-2xl border border-border-strong px-3 py-2 shadow-lg">
             <button
               type="button"
@@ -1158,7 +1435,10 @@ export default function WebBuilderPage() {
               className="apple-press inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent px-4 text-xs font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-60"
             >
               {saving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                <Loader2
+                  className="h-3.5 w-3.5 animate-spin"
+                  aria-hidden="true"
+                />
               ) : (
                 <UploadCloud className="h-3.5 w-3.5" aria-hidden="true" />
               )}
@@ -1522,7 +1802,10 @@ export default function WebBuilderPage() {
                           updateSpellDraft(selectedSpell.id, {
                             priceTiers: selectedSpell.priceTiers.map((it, i) =>
                               i === tIdx
-                                ? { ...it, priceArs: Number(e.target.value || 0) }
+                                ? {
+                                    ...it,
+                                    priceArs: Number(e.target.value || 0),
+                                  }
                                 : it
                             ),
                           })
@@ -1541,7 +1824,10 @@ export default function WebBuilderPage() {
                           updateSpellDraft(selectedSpell.id, {
                             priceTiers: selectedSpell.priceTiers.map((it, i) =>
                               i === tIdx
-                                ? { ...it, priceUsd: Number(e.target.value || 0) }
+                                ? {
+                                    ...it,
+                                    priceUsd: Number(e.target.value || 0),
+                                  }
                                 : it
                             ),
                           })
@@ -1616,7 +1902,7 @@ export default function WebBuilderPage() {
       </IosBottomSheet>
 
       {/* =========================================================
-          BOTTOM SHEET 2: HIDDEN SPELLS DRAWER (+ PUBLICAR EN CATEGORÍA)
+          BOTTOM SHEET 2: MOBILE HIDDEN SPELLS DRAWER
          ========================================================= */}
       <IosBottomSheet
         open={drawerOpen}
@@ -1648,7 +1934,7 @@ export default function WebBuilderPage() {
           </div>
 
           {privateSpells.length === 0 ? (
-            <p className="py-8 text-center text-sm text-ink-muted">
+            <p className="py-6 text-center text-sm text-ink-muted">
               ¡Todos tus hechizos ya están publicados en la web!
             </p>
           ) : (
