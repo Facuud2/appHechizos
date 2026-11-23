@@ -87,6 +87,9 @@ export const spellPriceTiers = pgTable(
     label: text("label").notNull().default(""),
     priceArs: doublePrecision("price_ars").notNull(),
     priceUsd: doublePrecision("price_usd").notNull(),
+    regularPriceArs: doublePrecision("regular_price_ars"),
+    regularPriceUsd: doublePrecision("regular_price_usd"),
+    discountPercent: integer("discount_percent"),
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("spell_price_tiers_spell_idx").on(t.spellId)]

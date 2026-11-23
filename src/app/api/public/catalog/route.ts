@@ -4,6 +4,9 @@ import {
   getPublicCatalog,
 } from "@/lib/public-catalog";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function OPTIONS(req: NextRequest) {
   const headers = buildPublicCatalogCorsHeaders(req.headers.get("origin"));
   return new NextResponse(null, { status: 204, headers });

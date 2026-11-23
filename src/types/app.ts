@@ -31,6 +31,9 @@ export interface PriceTierItem {
   label: string;
   priceArs: number;
   priceUsd: number;
+  regularPriceArs: number | null;
+  regularPriceUsd: number | null;
+  discountPercent: number | null;
   sortOrder: number;
 }
 

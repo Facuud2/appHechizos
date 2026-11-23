@@ -6,6 +6,11 @@ import {
 import { calculateVariationCost } from "@/lib/domain/costing";
 import { computeStockDeductions } from "@/lib/domain/stock-deduction";
 import { normalizeText } from "@/lib/domain/normalize";
+import {
+  parseBulkIngredientsText,
+  parseBulkSpellsText,
+} from "@/lib/domain/bulk-parser";
+import type { CategoryItem, IngredientItem } from "@/types/app";
 
 describe("My Bar matching engine", () => {
   const inventory = new Map<string, StockIngredientSnapshot>([
@@ -226,5 +231,97 @@ describe("Stock deduction engine", () => {
 describe("Text normalization", () => {
   it("normalizes accents and whitespace for deduplication", () => {
     expect(normalizeText("  Pétalos   de Rosa ")).toBe("petalos de rosa");
+  });
+});
+
+describe("Smart Bulk Parser (Ingredients & Spells)", () => {
+  const existingIngredients: IngredientItem[] = [
+    {
+      id: "ing-romero",
+      name: "Romero",
+      normalizedName: "romero",
+      groupTag: "Hierbas",
+      unitType: "g",
+      stockQty: 50,
+      lowThreshold: 10,
+      stockLevel: "plenty",
+      unitCostArs: 400,
+      unitCostUsd: null,
+      imageKey: null,
+      imageUrl: null,
+      notes: null,
+      updatedAt: "2026-01-01",
+    },
+  ];
+
+  const categories: CategoryItem[] = [
+    {
+      id: "cat-amor",
+      name: "Hechizos de Amor",
+      slug: "hechizos-de-amor",
+      publicIntro: null,
+      sortOrder: 1,
+    },
+    {
+      id: "cat-prosperidad",
+      name: "Prosperidad y Dinero",
+      slug: "prosperidad-y-dinero",
+      publicIntro: null,
+      sortOrder: 2,
+    },
+  ];
+
+  it("parses free-text bulk ingredients, detects existing stock, and infers units/groups", () => {
+    const raw = `Romero 30g $500, Vela roja 10u $850\nCuarzo rosa 3u $1500\nAgua Florida 100ml`;
+    const drafts = parseBulkIngredientsText(raw, existingIngredients);
+
+    expect(drafts).toHaveLength(4);
+
+    // 1. Existing Romero detected
+    expect(drafts[0].name).toBe("Romero");
+    expect(drafts[0].existingIngredientId).toBe("ing-romero");
+    expect(drafts[0].existingStockQty).toBe(50);
+    expect(drafts[0].stockQty).toBe(30);
+    expect(drafts[0].unitType).toBe("g");
+    expect(drafts[0].unitCostArs).toBe(500);
+
+    // 2. New Vela roja inferred as Velas + unit
+    expect(drafts[1].name).toBe("Vela roja");
+    expect(drafts[1].existingIngredientId).toBeNull();
+    expect(drafts[1].groupTag).toBe("Velas");
+    expect(drafts[1].unitType).toBe("unit");
+    expect(drafts[1].stockQty).toBe(10);
+    expect(drafts[1].unitCostArs).toBe(850);
+
+    // 3. New Cuarzo rosa inferred as Cristales
+    expect(drafts[2].groupTag).toBe("Cristales");
+    expect(drafts[2].stockQty).toBe(3);
+
+    // 4. New Agua Florida inferred as Aceites + ml
+    expect(drafts[3].groupTag).toBe("Aceites");
+    expect(drafts[3].unitType).toBe("ml");
+    expect(drafts[3].stockQty).toBe(100);
+  });
+
+  it("parses bulk spells with category, dual price, energies, and base recipe ingredients", () => {
+    const raw = `Endulzamiento Real | Amor | $35000 / USD 38 | Energías: Amor, Atracción | Ingredientes: Vela rosa 1u, Romero 15g, Miel pura 30ml`;
+    const spells = parseBulkSpellsText(raw, categories, existingIngredients);
+
+    expect(spells).toHaveLength(1);
+    const sp = spells[0];
+    expect(sp.title).toBe("Endulzamiento Real");
+    expect(sp.categoryId).toBe("cat-amor");
+    expect(sp.priceArs).toBe(35000);
+    expect(sp.priceUsd).toBe(38);
+    expect(sp.energyTypes).toEqual(["Amor", "Atracción"]);
+    expect(sp.ingredients).toHaveLength(3);
+
+    // Romero matches existingIngredientId, while Vela rosa and Miel pura are marked as new
+    expect(sp.ingredients[0].name).toBe("Vela rosa");
+    expect(sp.ingredients[0].existingIngredientId).toBeNull();
+    expect(sp.ingredients[1].name).toBe("Romero");
+    expect(sp.ingredients[1].existingIngredientId).toBe("ing-romero");
+    expect(sp.ingredients[1].quantity).toBe(15);
+    expect(sp.ingredients[1].unit).toBe("g");
   });
 });

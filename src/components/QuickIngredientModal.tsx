@@ -5,12 +5,18 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Layers,
   Minus,
   Plus,
+  User,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useCreateIngredient } from "@/hooks/useGrimorioData";
+import {
+  useCreateIngredient,
+  useGrimorio,
+} from "@/hooks/useGrimorioData";
+import { BulkIngredientsPanel } from "./BulkIngredientsPanel";
 import { IosBottomSheet } from "./IosBottomSheet";
 import type { IngredientItem } from "@/types/app";
 import type { StockLevel, UnitType } from "@/db/schema";
@@ -64,14 +70,18 @@ const INGREDIENT_STEPS = [
 export function QuickIngredientModal({
   open,
   initialName = "",
+  initialMode = "single",
   onClose,
   onCreated,
 }: {
   open: boolean;
   initialName?: string;
+  initialMode?: "single" | "bulk";
   onClose: () => void;
   onCreated?: (ingredient: IngredientItem) => void;
 }) {
+  const { data: grimorioData } = useGrimorio();
+  const [mode, setMode] = useState<"single" | "bulk">(initialMode);
   const [step, setStep] = useState(0);
   const [shakeTick, setShakeTick] = useState(0);
   const [name, setName] = useState(initialName);
@@ -88,6 +98,7 @@ export function QuickIngredientModal({
 
   useEffect(() => {
     if (!open) return;
+    setMode(initialMode);
     setStep(0);
     setName(initialName);
     setGroupTag("Hierbas");
@@ -97,7 +108,7 @@ export function QuickIngredientModal({
     setStockQty("50");
     setStockLevel("plenty");
     setUnitCostArs("");
-  }, [open, initialName]);
+  }, [open, initialName, initialMode]);
 
   const allGroups = Array.from(new Set([...DEFAULT_GROUP_TAGS, ...customGroups]));
 
@@ -188,88 +199,138 @@ export function QuickIngredientModal({
       open={open}
       onClose={onClose}
       ariaLabelledBy="quick-ing-title"
-      maxWidthClass="max-w-md"
+      maxWidthClass={mode === "bulk" ? "max-w-2xl" : "max-w-md"}
       shakeTick={shakeTick}
     >
-      {/* Top Header + Arrow Stepper */}
+      {/* Top Header + Individual/Bulk Switch + Arrow Stepper */}
       <div className="border-b border-border-subtle px-4 pt-1.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
-          <div className="flex items-center justify-between gap-2">
-            <h2
-              id="quick-ing-title"
-              className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
-            >
-              Nuevo producto
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Cerrar"
-              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Step Navigation Bar with Left / Right Arrows (Concentric: outer 14px - 5px pad = 9px inner) */}
-          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-[14px] border border-border-subtle bg-canvas p-1.5 sm:mt-3">
-            <button
-              type="button"
-              disabled={step === 0}
-              onClick={goPrev}
-              aria-label="Paso anterior"
-              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
-            >
-              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-            </button>
-
-            <div className="min-w-0 flex-1 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-accent-text tabular-nums">
-                Paso {step + 1} de {totalSteps}
-              </p>
-              <p className="truncate text-sm font-semibold text-ink">
-                {INGREDIENT_STEPS[step].title}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              disabled={step === totalSteps - 1}
-              onClick={goNext}
-              aria-label="Siguiente paso"
-              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
-            >
-              <ChevronRight className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Progress Dots */}
-          <div className="mt-2.5 flex items-center justify-center gap-1.5">
-            {INGREDIENT_STEPS.map((s, idx) => (
-              <button
-                key={s.id}
-                type="button"
-                aria-label={`Ir al paso ${idx + 1}: ${s.title}`}
-                onClick={() => {
-                  if (idx > 0 && !name.trim()) {
-                    toast.error("Primero escribí el nombre del producto.");
-                    return;
-                  }
-                  setStep(idx);
-                }}
-                className={`h-2 rounded-full transition-all ${
-                  step === idx
-                    ? "w-7 bg-accent"
-                    : idx < step
-                      ? "w-2 bg-ready-solid"
-                      : "w-2 bg-border-strong"
-                }`}
-              />
-            ))}
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <h2
+            id="quick-ing-title"
+            className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
+          >
+            {mode === "bulk" ? "Carga masiva de ingredientes" : "Nuevo producto"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
 
-        {/* Step Body (Strictly 1-2 fields per step) */}
-        <div className="scroll-contain flex-1 overflow-y-auto p-5">
+        {/* Mode Segmented Toggle: Individual | Carga Masiva */}
+        <div
+          role="tablist"
+          aria-label="Modo de carga de ingredientes"
+          className="mt-2.5 grid grid-cols-2 gap-1 rounded-[12px] border border-border-subtle bg-canvas p-1"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "single"}
+            onClick={() => setMode("single")}
+            className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
+              mode === "single"
+                ? "bg-surface text-ink shadow-xs"
+                : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <User className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Individual</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "bulk"}
+            onClick={() => setMode("bulk")}
+            className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
+              mode === "bulk"
+                ? "bg-accent-soft text-accent-text shadow-xs"
+                : "text-ink-muted hover:text-ink"
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Carga Masiva</span>
+          </button>
+        </div>
+
+        {mode === "single" && (
+          <>
+            {/* Step Navigation Bar with Left / Right Arrows */}
+            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-[14px] border border-border-subtle bg-canvas p-1.5 sm:mt-3">
+              <button
+                type="button"
+                disabled={step === 0}
+                onClick={goPrev}
+                aria-label="Paso anterior"
+                className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
+              >
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+              </button>
+
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-accent-text tabular-nums">
+                  Paso {step + 1} de {totalSteps}
+                </p>
+                <p className="truncate text-sm font-semibold text-ink">
+                  {INGREDIENT_STEPS[step].title}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={step === totalSteps - 1}
+                onClick={goNext}
+                aria-label="Siguiente paso"
+                className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
+              >
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Progress Dots */}
+            <div className="mt-2.5 flex items-center justify-center gap-1.5">
+              {INGREDIENT_STEPS.map((s, idx) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  aria-label={`Ir al paso ${idx + 1}: ${s.title}`}
+                  onClick={() => {
+                    if (idx > 0 && !name.trim()) {
+                      toast.error("Primero escribí el nombre del producto.");
+                      return;
+                    }
+                    setStep(idx);
+                  }}
+                  className={`h-2 rounded-full transition-all ${
+                    step === idx
+                      ? "w-7 bg-accent"
+                      : idx < step
+                        ? "w-2 bg-ready-solid"
+                        : "w-2 bg-border-strong"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {mode === "bulk" ? (
+        <div className="scroll-contain flex-1 overflow-y-auto p-4 sm:p-5">
+          <BulkIngredientsPanel
+            existingIngredients={grimorioData?.ingredients ?? []}
+            onCompleted={onClose}
+            compact
+          />
+        </div>
+      ) : (
+        <>
+          {/* Step Body (Strictly 1-2 fields per step) */}
+          <div className="scroll-contain flex-1 overflow-y-auto p-5">
           {/* PASO 1: Nombre y Rubro (+ Nuevo rubro) */}
           {step === 0 && (
             <div key="ing-step-0" className="animate-variation-enter space-y-4">
@@ -549,6 +610,8 @@ export function QuickIngredientModal({
             <span>{createMut.isPending ? "Guardando..." : "Guardar"}</span>
           </button>
         </div>
+        </>
+      )}
     </IosBottomSheet>
   );
 }

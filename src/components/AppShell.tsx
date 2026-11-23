@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FlaskConical,
+  Layers,
   Package,
   RefreshCw,
   Share,
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Hechizos", icon: BookOpen },
   { href: "/explorar", label: "My Bar", icon: FlaskConical },
   { href: "/stock", label: "Alacena", icon: Package },
+  { href: "/carga-masiva", label: "Masiva", icon: Layers },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -193,14 +195,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="Navegación inferior"
         className="apple-chrome apple-chrome-bottom pb-safe fixed bottom-0 left-0 right-0 z-40 w-full md:hidden"
       >
-        <div className="relative mx-auto grid max-w-md grid-cols-3 px-3 pt-1">
+        <div className="relative mx-auto grid max-w-md grid-cols-4 px-3 pt-1">
           {/* GPU-Composited Sliding Active Pill (160ms high-frequency rule) */}
           <span
             aria-hidden="true"
             style={{
               transform: `translateX(${activeNavIndex * 100}%)`,
             }}
-            className="pointer-events-none absolute top-1 bottom-0 left-3 w-[calc((100%-24px)/3)] rounded-[11px] bg-accent-soft transition-transform duration-[160ms] ease-[var(--ease-out)]"
+            className="pointer-events-none absolute top-1 bottom-0 left-3 w-[calc((100%-24px)/4)] rounded-[11px] bg-accent-soft transition-transform duration-[160ms] ease-[var(--ease-out)]"
           />
 
           {NAV_ITEMS.map((item, idx) => {

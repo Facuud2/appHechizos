@@ -302,7 +302,18 @@ async function seed() {
       isOffer: true,
       offerLabel: "¡OFERTA!",
       sortOrder: 2,
-      tiers: [{ id: "tier-ret-1", label: "", priceArs: 25000, priceUsd: 29, sortOrder: 1 }],
+      tiers: [
+        {
+          id: "tier-ret-1",
+          label: "",
+          priceArs: 25000,
+          priceUsd: 29,
+          regularPriceArs: 35000,
+          regularPriceUsd: 38,
+          discountPercent: 29,
+          sortOrder: 1,
+        },
+      ],
       baseIngredients: [
         { ingredientId: "ing-vela-roja", quantity: 2, unit: "unit" as const },
         { ingredientId: "ing-canela", quantity: 1, unit: "branch" as const },

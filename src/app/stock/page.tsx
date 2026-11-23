@@ -7,6 +7,7 @@ import {
   BookOpen,
   Camera,
   DollarSign,
+  Layers,
   Loader2,
   Minus,
   Plus,
@@ -227,6 +228,9 @@ export default function StockAlacenaPage() {
   const [groupFilter, setGroupFilter] = useState("all");
   const [onlyOut, setOnlyOut] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalInitialMode, setModalInitialMode] = useState<"single" | "bulk">(
+    "single"
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
 
@@ -339,14 +343,31 @@ export default function StockAlacenaPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent hover:bg-accent-hover sm:min-h-11 sm:px-4 sm:text-sm"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          <span>Nuevo</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setModalInitialMode("bulk");
+              setModalOpen(true);
+            }}
+            className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink hover:border-accent hover:text-accent-text sm:min-h-11 sm:px-3.5 sm:text-sm"
+          >
+            <Layers className="h-4 w-4 text-accent-text" aria-hidden="true" />
+            <span>Masiva</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setModalInitialMode("single");
+              setModalOpen(true);
+            }}
+            className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent hover:bg-accent-hover sm:min-h-11 sm:px-4 sm:text-sm"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            <span>Nuevo</span>
+          </button>
+        </div>
       </header>
 
       {/* Search & Out-of-stock filter */}
@@ -664,6 +685,7 @@ export default function StockAlacenaPage() {
 
       <QuickIngredientModal
         open={modalOpen}
+        initialMode={modalInitialMode}
         onClose={() => setModalOpen(false)}
       />
     </AppShell>

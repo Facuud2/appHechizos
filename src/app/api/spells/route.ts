@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import crypto from "node:crypto";
 import { getDb } from "@/db";
@@ -38,6 +39,9 @@ const createSpellSchema = z.object({
         label: z.string().trim().max(60).default(""),
         priceArs: z.number().min(0),
         priceUsd: z.number().min(0),
+        regularPriceArs: z.number().min(0).nullable().optional(),
+        regularPriceUsd: z.number().min(0).nullable().optional(),
+        discountPercent: z.number().int().min(1).max(99).nullable().optional(),
       })
     )
     .default([]),
@@ -99,14 +103,35 @@ export async function POST(req: NextRequest) {
 
     if (data.priceTiers.length > 0) {
       await db.insert(spellPriceTiers).values(
-        data.priceTiers.map((t, idx) => ({
-          id: `tier-${crypto.randomUUID().slice(0, 10)}`,
-          spellId,
-          label: t.label,
-          priceArs: t.priceArs,
-          priceUsd: t.priceUsd,
-          sortOrder: idx + 1,
-        }))
+        data.priceTiers.map((t, idx) => {
+          const regArs =
+            t.regularPriceArs && t.regularPriceArs > t.priceArs
+              ? t.regularPriceArs
+              : null;
+          const regUsd =
+            t.regularPriceUsd && t.regularPriceUsd > t.priceUsd
+              ? t.regularPriceUsd
+              : null;
+          const pct =
+            t.discountPercent ??
+            (regArs
+              ? Math.round(((regArs - t.priceArs) / regArs) * 100)
+              : regUsd
+                ? Math.round(((regUsd - t.priceUsd) / regUsd) * 100)
+                : null);
+
+          return {
+            id: `tier-${crypto.randomUUID().slice(0, 10)}`,
+            spellId,
+            label: t.label,
+            priceArs: t.priceArs,
+            priceUsd: t.priceUsd,
+            regularPriceArs: regArs,
+            regularPriceUsd: regUsd,
+            discountPercent: pct,
+            sortOrder: idx + 1,
+          };
+        })
       );
     }
 
@@ -146,6 +171,8 @@ export async function POST(req: NextRequest) {
         }))
       );
     }
+
+    revalidatePath("/api/public/catalog");
 
     return NextResponse.json(
       { id: spellId, baseVariationId: baseVarId },

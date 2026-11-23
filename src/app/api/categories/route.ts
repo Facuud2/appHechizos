@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "node:crypto";
@@ -75,6 +76,8 @@ export async function POST(req: NextRequest) {
         sortOrder: maxSort + 1,
       })
       .returning();
+
+    revalidatePath("/api/public/catalog");
 
     return NextResponse.json(
       { category: created, alreadyExisted: false },

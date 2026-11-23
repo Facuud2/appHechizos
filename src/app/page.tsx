@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
+  FolderKanban,
   Globe,
   ImageIcon,
   Layers,
@@ -18,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { CategoriesModal } from "@/components/CategoriesModal";
 import { PublishNetlifyModal } from "@/components/PublishNetlifyModal";
 import {
   HomeGrimorioSkeleton,
@@ -35,7 +37,11 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedEnergy, setSelectedEnergy] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createInitialMode, setCreateInitialMode] = useState<"single" | "bulk">(
+    "single"
+  );
   const [publishOpen, setPublishOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   const inventoryMap = useMemo(() => {
     const map = new Map();
@@ -169,7 +175,22 @@ export default function HomePage() {
 
           <button
             type="button"
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              setCreateInitialMode("bulk");
+              setCreateOpen(true);
+            }}
+            className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] border border-border-subtle bg-surface px-3 py-2 text-xs font-semibold text-ink hover:border-accent hover:text-accent-text sm:min-h-11 sm:px-3.5 sm:text-sm"
+          >
+            <Layers className="h-4 w-4 text-accent-text" aria-hidden="true" />
+            <span>Masiva</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setCreateInitialMode("single");
+              setCreateOpen(true);
+            }}
             className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-accent px-3.5 py-2 text-xs font-semibold text-on-accent hover:bg-accent-hover sm:min-h-11 sm:px-4 sm:text-sm"
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -285,6 +306,14 @@ export default function HomePage() {
                 {cat.name}
               </button>
             ))}
+        <button
+          type="button"
+          onClick={() => setCategoriesOpen(true)}
+          className="apple-press hit-44 inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-dashed border-border-strong bg-canvas px-3 py-1.5 text-xs font-semibold text-accent-text hover:border-accent"
+        >
+          <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Categorías</span>
+        </button>
       </div>
 
       {/* Optional Energy Filter */}
@@ -513,10 +542,31 @@ export default function HomePage() {
                             spell.priceTiers.slice(0, 2).map((tier) => (
                               <p
                                 key={tier.id}
-                                className="whitespace-nowrap text-xs font-semibold text-accent-text"
+                                className="flex flex-wrap items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-accent-text"
                               >
-                                {tier.label ? `${tier.label}: ` : ""}
-                                {formatDualPrice(tier.priceArs, tier.priceUsd)}
+                                <span>
+                                  {tier.label ? `${tier.label}: ` : ""}
+                                </span>
+                                {(tier.regularPriceArs &&
+                                  tier.regularPriceArs > tier.priceArs) ||
+                                (tier.regularPriceUsd &&
+                                  tier.regularPriceUsd > tier.priceUsd) ? (
+                                  <span className="text-[11px] font-normal text-ink-dim line-through">
+                                    {formatDualPrice(
+                                      tier.regularPriceArs ?? tier.priceArs,
+                                      tier.regularPriceUsd ?? tier.priceUsd
+                                    )}
+                                  </span>
+                                ) : null}
+                                <span>
+                                  {formatDualPrice(tier.priceArs, tier.priceUsd)}
+                                </span>
+                                {tier.discountPercent &&
+                                tier.discountPercent > 0 ? (
+                                  <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-text">
+                                    -{tier.discountPercent}%
+                                  </span>
+                                ) : null}
                               </p>
                             ))
                           ) : (
@@ -587,6 +637,7 @@ export default function HomePage() {
 
       <SpellFormModal
         open={createOpen}
+        initialMode={createInitialMode}
         categories={data?.categories ?? []}
         onClose={() => setCreateOpen(false)}
       />
@@ -594,7 +645,16 @@ export default function HomePage() {
       <PublishNetlifyModal
         open={publishOpen}
         spells={data?.spells ?? []}
+        categories={data?.categories ?? []}
         onClose={() => setPublishOpen(false)}
+        onOpenCategories={() => setCategoriesOpen(true)}
+      />
+
+      <CategoriesModal
+        open={categoriesOpen}
+        categories={data?.categories ?? []}
+        spells={data?.spells ?? []}
+        onClose={() => setCategoriesOpen(false)}
       />
     </AppShell>
   );

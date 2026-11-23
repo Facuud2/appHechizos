@@ -66,6 +66,12 @@ export function SpellDetailView({
     [data?.spells, spellId]
   );
 
+  const spellCategory = useMemo(
+    () =>
+      data?.categories.find((c) => c.id === spell?.categoryId) ?? null,
+    [data?.categories, spell?.categoryId]
+  );
+
   const inventoryMap = useMemo(() => {
     const map = new Map();
     for (const ing of data?.ingredients ?? []) map.set(ing.id, ing);
@@ -490,18 +496,16 @@ export function SpellDetailView({
         body: JSON.stringify({ isPublished: nextPublished }),
       });
       if (!res.ok) throw new Error("No se pudo actualizar");
-      if (nextPublished) {
-        await fetch("/api/public/publish", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-      }
+      await fetch("/api/public/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
       await invalidate();
       toast.success(
         nextPublished
           ? `"${spell.title}" publicado en tarotdeluna.netlify.app.`
-          : `"${spell.title}" pasó a privado.`
+          : `"${spell.title}" ocultado del catálogo público.`
       );
     } catch {
       toast.error("No se pudo cambiar la publicación.");
@@ -643,6 +647,11 @@ export function SpellDetailView({
               <h1 className="display-heading text-[28px] font-bold tracking-[-0.02em] text-ink sm:text-4xl">
                 {spell.title}
               </h1>
+              {spellCategory && (
+                <span className="inline-flex items-center rounded-full border border-border-subtle bg-canvas px-2.5 py-0.5 text-xs font-medium text-ink-muted">
+                  {spellCategory.name}
+                </span>
+              )}
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                   spell.isPublished
@@ -668,9 +677,28 @@ export function SpellDetailView({
 
           <div className="text-right tabular-nums">
             {spell.priceTiers.map((tier) => (
-              <p key={tier.id} className="whitespace-nowrap text-sm font-semibold text-accent-text">
-                {tier.label ? `${tier.label}: ` : ""}
-                {formatDualPrice(tier.priceArs, tier.priceUsd)}
+              <p
+                key={tier.id}
+                className="flex flex-wrap items-center justify-end gap-1.5 whitespace-nowrap text-sm font-semibold text-accent-text"
+              >
+                {tier.label ? <span>{tier.label}:</span> : null}
+                {(tier.regularPriceArs &&
+                  tier.regularPriceArs > tier.priceArs) ||
+                (tier.regularPriceUsd &&
+                  tier.regularPriceUsd > tier.priceUsd) ? (
+                  <span className="text-xs font-normal text-ink-dim line-through">
+                    {formatDualPrice(
+                      tier.regularPriceArs ?? tier.priceArs,
+                      tier.regularPriceUsd ?? tier.priceUsd
+                    )}
+                  </span>
+                ) : null}
+                <span>{formatDualPrice(tier.priceArs, tier.priceUsd)}</span>
+                {tier.discountPercent && tier.discountPercent > 0 ? (
+                  <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-bold text-accent-text">
+                    -{tier.discountPercent}% OFF
+                  </span>
+                ) : null}
               </p>
             ))}
           </div>

@@ -6,14 +6,20 @@ import {
   ChevronLeft,
   ChevronRight,
   Globe,
+  Layers,
   Loader2,
   Lock,
   Plus,
   Trash2,
+  User,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useInvalidateGrimorio } from "@/hooks/useGrimorioData";
+import {
+  useGrimorio,
+  useInvalidateGrimorio,
+} from "@/hooks/useGrimorioData";
+import { BulkSpellsPanel } from "./BulkSpellsPanel";
 import { IosBottomSheet } from "./IosBottomSheet";
 import type { CategoryItem, SpellItem } from "@/types/app";
 
@@ -21,6 +27,28 @@ interface TierDraft {
   label: string;
   priceArs: string;
   priceUsd: string;
+  regularPriceArs: string;
+  regularPriceUsd: string;
+  discountPercent: string;
+}
+
+function calcDiscountPercent(
+  regularArsStr: string,
+  priceArsStr: string,
+  regularUsdStr: string,
+  priceUsdStr: string
+): number | null {
+  const regArs = Number(regularArsStr);
+  const curArs = Number(priceArsStr);
+  if (regArs > 0 && curArs > 0 && regArs > curArs) {
+    return Math.round(((regArs - curArs) / regArs) * 100);
+  }
+  const regUsd = Number(regularUsdStr);
+  const curUsd = Number(priceUsdStr);
+  if (regUsd > 0 && curUsd > 0 && regUsd > curUsd) {
+    return Math.round(((regUsd - curUsd) / regUsd) * 100);
+  }
+  return null;
 }
 
 const DEFAULT_ENERGIES = [
@@ -48,16 +76,20 @@ export function SpellFormModal({
   open,
   categories,
   editingSpell,
+  initialMode = "single",
   onClose,
   onSaved,
 }: {
   open: boolean;
   categories: CategoryItem[];
   editingSpell?: SpellItem | null;
+  initialMode?: "single" | "bulk";
   onClose: () => void;
   onSaved?: (spellId: string) => void;
 }) {
+  const { data: grimorioData } = useGrimorio();
   const invalidate = useInvalidateGrimorio();
+  const [mode, setMode] = useState<"single" | "bulk">(initialMode);
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0);
   const [shakeTick, setShakeTick] = useState(0);
@@ -98,8 +130,20 @@ export function SpellFormModal({
           label: t.label,
           priceArs: String(t.priceArs),
           priceUsd: String(t.priceUsd),
+          regularPriceArs: t.regularPriceArs ? String(t.regularPriceArs) : "",
+          regularPriceUsd: t.regularPriceUsd ? String(t.regularPriceUsd) : "",
+          discountPercent: t.discountPercent ? String(t.discountPercent) : "",
         }))
-      : [{ label: "", priceArs: "30000", priceUsd: "34" }]
+      : [
+          {
+            label: "",
+            priceArs: "30000",
+            priceUsd: "34",
+            regularPriceArs: "",
+            regularPriceUsd: "",
+            discountPercent: "",
+          },
+        ]
   );
 
   useEffect(() => {
@@ -108,6 +152,7 @@ export function SpellFormModal({
 
   useEffect(() => {
     if (!open) return;
+    setMode(editingSpell ? "single" : initialMode);
     setStep(0);
     setTitle(editingSpell?.title ?? "");
     setCategoryId(editingSpell?.categoryId ?? categories[0]?.id ?? "");
@@ -127,10 +172,22 @@ export function SpellFormModal({
             label: t.label,
             priceArs: String(t.priceArs),
             priceUsd: String(t.priceUsd),
+            regularPriceArs: t.regularPriceArs ? String(t.regularPriceArs) : "",
+            regularPriceUsd: t.regularPriceUsd ? String(t.regularPriceUsd) : "",
+            discountPercent: t.discountPercent ? String(t.discountPercent) : "",
           }))
-        : [{ label: "", priceArs: "30000", priceUsd: "34" }]
+        : [
+            {
+              label: "",
+              priceArs: "30000",
+              priceUsd: "34",
+              regularPriceArs: "",
+              regularPriceUsd: "",
+              discountPercent: "",
+            },
+          ]
     );
-  }, [open, editingSpell, categories]);
+  }, [open, editingSpell, categories, initialMode]);
 
   // All available energy pills = defaults + any custom ones already added
   const allEnergyOptions = Array.from(
@@ -208,11 +265,27 @@ export function SpellFormModal({
 
     const priceTiers = tiers
       .filter((t) => t.priceArs !== "" || t.priceUsd !== "")
-      .map((t) => ({
-        label: t.label.trim(),
-        priceArs: Number(t.priceArs || 0),
-        priceUsd: Number(t.priceUsd || 0),
-      }));
+      .map((t) => {
+        const pArs = Number(t.priceArs || 0);
+        const pUsd = Number(t.priceUsd || 0);
+        const regArs = t.regularPriceArs ? Number(t.regularPriceArs) : null;
+        const regUsd = t.regularPriceUsd ? Number(t.regularPriceUsd) : null;
+        const autoPct = calcDiscountPercent(
+          t.regularPriceArs,
+          t.priceArs,
+          t.regularPriceUsd,
+          t.priceUsd
+        );
+        const explicitPct = t.discountPercent ? Number(t.discountPercent) : null;
+        return {
+          label: t.label.trim(),
+          priceArs: pArs,
+          priceUsd: pUsd,
+          regularPriceArs: regArs && regArs > pArs ? regArs : null,
+          regularPriceUsd: regUsd && regUsd > pUsd ? regUsd : null,
+          discountPercent: explicitPct ?? autoPct,
+        };
+      });
 
     try {
       const url = editingSpell
@@ -263,88 +336,145 @@ export function SpellFormModal({
       open={open}
       onClose={onClose}
       ariaLabelledBy="spell-form-title"
-      maxWidthClass="max-w-lg"
+      maxWidthClass={mode === "bulk" ? "max-w-2xl" : "max-w-lg"}
       shakeTick={shakeTick}
     >
-      {/* Top Header + Arrow Stepper */}
+      {/* Top Header + Mode Switch + Arrow Stepper */}
       <div className="border-b border-border-subtle px-4 pt-1.5 pb-3 sm:px-5 sm:pt-4 sm:pb-3.5">
-          <div className="flex items-center justify-between gap-2">
-            <h2
-              id="spell-form-title"
-              className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
-            >
-              {editingSpell ? "Editar hechizo" : "Nuevo hechizo"}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Cerrar"
-              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Step Navigation Bar with Left / Right Arrows (Concentric: outer 14px - 5px pad = 9px inner) */}
-          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-[14px] border border-border-subtle bg-canvas p-1.5 sm:mt-3">
-            <button
-              type="button"
-              disabled={step === 0}
-              onClick={goPrev}
-              aria-label="Paso anterior"
-              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
-            >
-              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-            </button>
-
-            <div className="min-w-0 flex-1 text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-accent-text tabular-nums">
-                Paso {step + 1} de {totalSteps}
-              </p>
-              <p className="truncate text-sm font-semibold text-ink">
-                {WIZARD_STEPS[step].title}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              disabled={step === totalSteps - 1}
-              onClick={goNext}
-              aria-label="Siguiente paso"
-              className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
-            >
-              <ChevronRight className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Progress Dots (clickable to jump directly) */}
-          <div className="mt-2.5 flex items-center justify-center gap-1.5">
-            {WIZARD_STEPS.map((s, idx) => (
-              <button
-                key={s.id}
-                type="button"
-                aria-label={`Ir al paso ${idx + 1}: ${s.title}`}
-                onClick={() => {
-                  if (idx > 0 && !title.trim()) {
-                    toast.error("Primero poné el nombre del hechizo.");
-                    return;
-                  }
-                  setStep(idx);
-                }}
-                className={`h-2 rounded-full transition-all ${
-                  step === idx
-                    ? "w-7 bg-accent"
-                    : idx < step
-                      ? "w-2 bg-ready-solid"
-                      : "w-2 bg-border-strong"
-                }`}
-              />
-            ))}
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <h2
+            id="spell-form-title"
+            className="section-heading text-[18px] font-semibold text-ink sm:text-xl"
+          >
+            {editingSpell
+              ? "Editar hechizo"
+              : mode === "bulk"
+                ? "Carga masiva de hechizos"
+                : "Nuevo hechizo"}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar"
+            className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-ink-muted hover:bg-surface-elevated hover:text-ink"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
 
-        {/* Step Content (Strictly 2-3 fields max per step) */}
-        <div className="scroll-contain flex-1 overflow-y-auto p-5">
+        {/* Mode Segmented Toggle when creating new spells */}
+        {!editingSpell && (
+          <div
+            role="tablist"
+            aria-label="Modo de carga de hechizos"
+            className="mt-2.5 grid grid-cols-2 gap-1 rounded-[12px] border border-border-subtle bg-canvas p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "single"}
+              onClick={() => setMode("single")}
+              className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
+                mode === "single"
+                  ? "bg-surface text-ink shadow-xs"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <User className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Individual</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "bulk"}
+              onClick={() => setMode("bulk")}
+              className={`apple-press flex min-h-9 items-center justify-center gap-1.5 rounded-[8px] px-3 py-1.5 text-xs font-semibold ${
+                mode === "bulk"
+                  ? "bg-accent-soft text-accent-text shadow-xs"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Carga Masiva</span>
+            </button>
+          </div>
+        )}
+
+        {mode === "single" && (
+          <>
+            {/* Step Navigation Bar with Left / Right Arrows */}
+            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-[14px] border border-border-subtle bg-canvas p-1.5 sm:mt-3">
+              <button
+                type="button"
+                disabled={step === 0}
+                onClick={goPrev}
+                aria-label="Paso anterior"
+                className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
+              >
+                <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+              </button>
+
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-accent-text tabular-nums">
+                  Paso {step + 1} de {totalSteps}
+                </p>
+                <p className="truncate text-sm font-semibold text-ink">
+                  {WIZARD_STEPS[step].title}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={step === totalSteps - 1}
+                onClick={goNext}
+                aria-label="Siguiente paso"
+                className="apple-press hit-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-border-subtle bg-surface text-ink hover:border-accent disabled:opacity-30 sm:h-10 sm:w-10"
+              >
+                <ChevronRight className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Progress Dots (clickable to jump directly) */}
+            <div className="mt-2.5 flex items-center justify-center gap-1.5">
+              {WIZARD_STEPS.map((s, idx) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  aria-label={`Ir al paso ${idx + 1}: ${s.title}`}
+                  onClick={() => {
+                    if (idx > 0 && !title.trim()) {
+                      toast.error("Primero poné el nombre del hechizo.");
+                      return;
+                    }
+                    setStep(idx);
+                  }}
+                  className={`h-2 rounded-full transition-all ${
+                    step === idx
+                      ? "w-7 bg-accent"
+                      : idx < step
+                        ? "w-2 bg-ready-solid"
+                        : "w-2 bg-border-strong"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {mode === "bulk" ? (
+        <div className="scroll-contain flex-1 overflow-y-auto p-4 sm:p-5">
+          <BulkSpellsPanel
+            categories={localCategories}
+            existingIngredients={grimorioData?.ingredients ?? []}
+            onCompleted={onClose}
+            compact
+          />
+        </div>
+      ) : (
+        <>
+          {/* Step Content (Strictly 2-3 fields max per step) */}
+          <div className="scroll-contain flex-1 overflow-y-auto p-5">
           {/* PASO 1: Nombre y Categoría (+ Crear nueva categoría) */}
           {step === 0 && (
             <div key="step-0" className="animate-variation-enter space-y-4">
@@ -525,7 +655,14 @@ export function SpellFormModal({
                   onClick={() =>
                     setTiers((prev) => [
                       ...prev,
-                      { label: "Potenciado", priceArs: "", priceUsd: "" },
+                      {
+                        label: "Potenciado",
+                        priceArs: "",
+                        priceUsd: "",
+                        regularPriceArs: "",
+                        regularPriceUsd: "",
+                        discountPercent: "",
+                      },
                     ])
                   }
                   className="apple-press flex min-h-9 shrink-0 items-center gap-1 rounded-xl border border-border-subtle bg-canvas px-3 py-1.5 text-xs font-semibold text-accent-text"
@@ -535,7 +672,17 @@ export function SpellFormModal({
               </div>
 
               <div className="space-y-3">
-                {tiers.map((tier, idx) => (
+                {tiers.map((tier, idx) => {
+                  const computedPct = calcDiscountPercent(
+                    tier.regularPriceArs,
+                    tier.priceArs,
+                    tier.regularPriceUsd,
+                    tier.priceUsd
+                  );
+                  const displayPct = tier.discountPercent
+                    ? Number(tier.discountPercent)
+                    : computedPct;
+                  return (
                   <div
                     key={idx}
                     className="rounded-2xl border border-border-subtle bg-canvas p-3.5"
@@ -577,7 +724,7 @@ export function SpellFormModal({
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="mb-1 block text-xs font-medium text-ink-muted">
-                          Pesos (ARS)
+                          Precio actual (ARS)
                         </label>
                         <input
                           type="number"
@@ -593,13 +740,13 @@ export function SpellFormModal({
                               )
                             )
                           }
-                          placeholder="30000"
+                          placeholder="25000"
                           className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2.5 tabular-nums text-base font-semibold text-ink outline-none focus:border-accent"
                         />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs font-medium text-ink-muted">
-                          Dólares (USD)
+                          Precio actual (USD)
                         </label>
                         <input
                           type="number"
@@ -616,13 +763,91 @@ export function SpellFormModal({
                               )
                             )
                           }
-                          placeholder="34"
+                          placeholder="29"
                           className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2.5 tabular-nums text-base font-semibold text-ink outline-none focus:border-accent"
                         />
                       </div>
                     </div>
+
+                    {/* Precio común tachado y % de descuento */}
+                    <div className="mt-3 border-t border-border-subtle pt-2.5">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-ink-muted">
+                          Precio común sin descuento (opcional, aparece tachado)
+                        </span>
+                        {displayPct && displayPct > 0 ? (
+                          <span className="rounded-full bg-accent-soft px-2 py-0.5 tabular-nums text-[11px] font-bold text-accent-text">
+                            -{displayPct}% OFF
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1 block text-[11px] text-ink-dim">
+                            Antes ARS
+                          </label>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            value={tier.regularPriceArs}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val && Number(val) > Number(tier.priceArs || 0)) {
+                                setIsOffer(true);
+                              }
+                              setTiers((prev) =>
+                                prev.map((item, i) =>
+                                  i === idx
+                                    ? {
+                                        ...item,
+                                        regularPriceArs: val,
+                                        discountPercent: "",
+                                      }
+                                    : item
+                                )
+                              );
+                            }}
+                            placeholder="Ej. 35000"
+                            className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2 tabular-nums text-base text-ink-muted outline-none focus:border-accent"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[11px] text-ink-dim">
+                            Antes USD
+                          </label>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="any"
+                            value={tier.regularPriceUsd}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val && Number(val) > Number(tier.priceUsd || 0)) {
+                                setIsOffer(true);
+                              }
+                              setTiers((prev) =>
+                                prev.map((item, i) =>
+                                  i === idx
+                                    ? {
+                                        ...item,
+                                        regularPriceUsd: val,
+                                        discountPercent: "",
+                                      }
+                                    : item
+                                )
+                              );
+                            }}
+                            placeholder="Ej. 38"
+                            className="w-full rounded-xl border border-border-subtle bg-surface px-3 py-2 tabular-nums text-base text-ink-muted outline-none focus:border-accent"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -762,6 +987,8 @@ export function SpellFormModal({
             <span>{saving ? "Guardando..." : "Guardar"}</span>
           </button>
         </div>
+        </>
+      )}
     </IosBottomSheet>
   );
 }

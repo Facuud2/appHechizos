@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "node:crypto";
@@ -23,6 +24,9 @@ const updateSpellSchema = z.object({
         label: z.string().trim().max(60).default(""),
         priceArs: z.number().min(0),
         priceUsd: z.number().min(0),
+        regularPriceArs: z.number().min(0).nullable().optional(),
+        regularPriceUsd: z.number().min(0).nullable().optional(),
+        discountPercent: z.number().int().min(1).max(99).nullable().optional(),
       })
     )
     .optional(),
@@ -62,17 +66,40 @@ export async function PATCH(
       await db.delete(spellPriceTiers).where(eq(spellPriceTiers.spellId, id));
       if (priceTiers.length > 0) {
         await db.insert(spellPriceTiers).values(
-          priceTiers.map((t, idx) => ({
-            id: `tier-${crypto.randomUUID().slice(0, 10)}`,
-            spellId: id,
-            label: t.label,
-            priceArs: t.priceArs,
-            priceUsd: t.priceUsd,
-            sortOrder: idx + 1,
-          }))
+          priceTiers.map((t, idx) => {
+            const regArs =
+              t.regularPriceArs && t.regularPriceArs > t.priceArs
+                ? t.regularPriceArs
+                : null;
+            const regUsd =
+              t.regularPriceUsd && t.regularPriceUsd > t.priceUsd
+                ? t.regularPriceUsd
+                : null;
+            const pct =
+              t.discountPercent ??
+              (regArs
+                ? Math.round(((regArs - t.priceArs) / regArs) * 100)
+                : regUsd
+                  ? Math.round(((regUsd - t.priceUsd) / regUsd) * 100)
+                  : null);
+
+            return {
+              id: `tier-${crypto.randomUUID().slice(0, 10)}`,
+              spellId: id,
+              label: t.label,
+              priceArs: t.priceArs,
+              priceUsd: t.priceUsd,
+              regularPriceArs: regArs,
+              regularPriceUsd: regUsd,
+              discountPercent: pct,
+              sortOrder: idx + 1,
+            };
+          })
         );
       }
     }
+
+    revalidatePath("/api/public/catalog");
 
     return NextResponse.json({ ok: true, id });
   } catch (err) {
@@ -95,6 +122,7 @@ export async function DELETE(
   try {
     const db = getDb();
     await db.delete(spells).where(eq(spells.id, id));
+    revalidatePath("/api/public/catalog");
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("[DELETE /api/spells/:id] error:", err);

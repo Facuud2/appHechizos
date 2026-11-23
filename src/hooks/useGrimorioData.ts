@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { BootstrapPayload, IngredientItem } from "@/types/app";
@@ -31,7 +32,13 @@ async function fetchBootstrap(): Promise<BootstrapPayload> {
 }
 
 export function useGrimorio() {
-  return useQuery({
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  const query = useQuery({
     queryKey: GRIMORIO_QUERY_KEY,
     queryFn: fetchBootstrap,
     retry: (failureCount, error) => {
@@ -44,11 +51,106 @@ export function useGrimorio() {
       return failureCount < 1;
     },
   });
+
+  if (!hydrated) {
+    return {
+      ...query,
+      data: undefined,
+      error: null,
+      isLoading: true,
+      isFetching: false,
+      isPending: true,
+    };
+  }
+
+  return query;
 }
 
 export function useInvalidateGrimorio() {
   const qc = useQueryClient();
   return () => qc.invalidateQueries({ queryKey: GRIMORIO_QUERY_KEY });
+}
+
+export function useCreateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      publicIntro?: string | null;
+    }) => {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error || "No se pudo crear la categoría");
+      return data as {
+        category: BootstrapPayload["categories"][number];
+        alreadyExisted: boolean;
+      };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: GRIMORIO_QUERY_KEY });
+      if (data.alreadyExisted) {
+        toast.info(`La categoría "${data.category.name}" ya existía.`);
+      } else {
+        toast.success(`Categoría "${data.category.name}" creada.`);
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
+export function useUpdateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: Partial<{
+        name: string;
+        publicIntro: string | null;
+        sortOrder: number;
+      }>;
+    }) => {
+      const res = await fetch(`/api/categories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error || "No se pudo actualizar la categoría");
+      return data.category as BootstrapPayload["categories"][number];
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: GRIMORIO_QUERY_KEY });
+      toast.success("Categoría actualizada.");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.error || "No se pudo eliminar la categoría");
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: GRIMORIO_QUERY_KEY });
+      toast.success("Categoría eliminada.");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 }
 
 export function useCreateIngredient() {
@@ -189,6 +291,122 @@ export function usePerformVariation() {
       } else {
         toast.success("Ritual registrado en tu historial.");
       }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
+export function useBulkCreateIngredients() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      items: {
+        name: string;
+        groupTag: string;
+        unitType: IngredientItem["unitType"];
+        stockQty: number | null;
+        stockLevel: IngredientItem["stockLevel"];
+        unitCostArs: number | null;
+        duplicateAction: "add_stock" | "overwrite" | "skip";
+      }[];
+    }) => {
+      const res = await fetch("/api/ingredients/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudo realizar la carga masiva");
+      }
+      return data as {
+        createdCount: number;
+        updatedCount: number;
+        skippedCount: number;
+        ingredients: IngredientItem[];
+      };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: GRIMORIO_QUERY_KEY });
+      const parts: string[] = [];
+      if (data.createdCount > 0) {
+        parts.push(
+          `${data.createdCount} ${
+            data.createdCount === 1 ? "nuevo" : "nuevos"
+          }`
+        );
+      }
+      if (data.updatedCount > 0) {
+        parts.push(
+          `${data.updatedCount} ${
+            data.updatedCount === 1 ? "actualizado" : "actualizados"
+          }`
+        );
+      }
+      if (data.skippedCount > 0) {
+        parts.push(`${data.skippedCount} omitidos`);
+      }
+      toast.success(
+        `Alacena actualizada · ${parts.join(", ") || "Cambios guardados"}.`
+      );
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
+export function useBulkCreateSpells() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      items: {
+        title: string;
+        categoryId: string | null;
+        categoryName?: string;
+        purpose?: string | null;
+        energyTypes: string[];
+        isPublished: boolean;
+        priceArs: number;
+        priceUsd: number;
+        ingredients: {
+          name: string;
+          quantity: number | null;
+          unit: IngredientItem["unitType"];
+          groupTag?: string;
+          isOptional?: boolean;
+        }[];
+      }[];
+    }) => {
+      const res = await fetch("/api/spells/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error || "No se pudo realizar la carga masiva de hechizos"
+        );
+      }
+      return data as {
+        createdSpellsCount: number;
+        autoCreatedIngredientsCount: number;
+        autoCreatedCategoriesCount: number;
+        spellIds: string[];
+      };
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: GRIMORIO_QUERY_KEY });
+      const extra =
+        data.autoCreatedIngredientsCount > 0
+          ? ` (+${data.autoCreatedIngredientsCount} ingredientes nuevos en Alacena)`
+          : "";
+      toast.success(
+        `${data.createdSpellsCount} ${
+          data.createdSpellsCount === 1
+            ? "hechizo creado"
+            : "hechizos creados"
+        }${extra}.`
+      );
     },
     onError: (err: Error) => toast.error(err.message),
   });
