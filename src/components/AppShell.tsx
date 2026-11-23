@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   FlaskConical,
+  Globe,
   Layers,
   Package,
   RefreshCw,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Hechizos", icon: BookOpen },
   { href: "/explorar", label: "My Bar", icon: FlaskConical },
   { href: "/stock", label: "Alacena", icon: Package },
+  { href: "/web", label: "Web", icon: Globe },
   { href: "/carga-masiva", label: "Masiva", icon: Layers },
 ] as const;
 
@@ -195,14 +197,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         aria-label="Navegación inferior"
         className="apple-chrome apple-chrome-bottom pb-safe fixed bottom-0 left-0 right-0 z-40 w-full md:hidden"
       >
-        <div className="relative mx-auto grid max-w-md grid-cols-4 px-3 pt-1">
+        <div className="relative mx-auto grid max-w-md grid-cols-5 px-2 pt-1">
           {/* GPU-Composited Sliding Active Pill (160ms high-frequency rule) */}
           <span
             aria-hidden="true"
             style={{
               transform: `translateX(${activeNavIndex * 100}%)`,
             }}
-            className="pointer-events-none absolute top-1 bottom-0 left-3 w-[calc((100%-24px)/4)] rounded-[11px] bg-accent-soft transition-transform duration-[160ms] ease-[var(--ease-out)]"
+            className="pointer-events-none absolute top-1 bottom-0 left-2 w-[calc((100%-16px)/5)] rounded-[11px] bg-accent-soft transition-transform duration-[160ms] ease-[var(--ease-out)]"
           />
 
           {NAV_ITEMS.map((item, idx) => {
@@ -214,18 +216,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`apple-press relative z-10 flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-[11px] px-2 py-1 text-[11px] leading-none font-medium tracking-[0.01em] transition-colors duration-[140ms] ${
+                className={`apple-press relative z-10 flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-[11px] px-1 py-1 text-[10px] leading-none font-medium tracking-[0.01em] transition-colors duration-[140ms] ${
                   active ? "text-accent-text font-semibold" : "text-ink-muted"
                 }`}
               >
                 <Icon
-                  className={`h-[22px] w-[22px] transition-transform duration-[140ms] ease-[var(--ease-out)] ${
+                  className={`h-[20px] w-[20px] transition-transform duration-[140ms] ease-[var(--ease-out)] ${
                     active ? "scale-105" : "scale-100"
                   }`}
                   strokeWidth={active ? 2.15 : 1.75}
                   aria-hidden="true"
                 />
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}

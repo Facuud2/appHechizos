@@ -164,14 +164,13 @@ export default function HomePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPublishOpen(true)}
+          <Link
+            href="/web"
             className="apple-press hit-44 inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-[12px] border border-info/40 bg-info-soft px-3 py-2 text-xs font-semibold text-info hover:border-info sm:min-h-11 sm:px-3.5 sm:text-sm"
           >
-            <UploadCloud className="h-4 w-4" aria-hidden="true" />
-            <span>Subir a web</span>
-          </button>
+            <Globe className="h-4 w-4" aria-hidden="true" />
+            <span>Vista Previa Web</span>
+          </Link>
 
           <button
             type="button"
@@ -221,16 +220,15 @@ export default function HomePage() {
                 </span>
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setPublishOpen(true)}
-              className="apple-press px-3 py-2.5 text-left transition hover:bg-surface-elevated sm:px-5 sm:py-3"
+            <Link
+              href="/web"
+              className="apple-press block px-3 py-2.5 text-left transition hover:bg-surface-elevated sm:px-5 sm:py-3"
             >
               <p className="text-xs text-ink-muted">En web Netlify</p>
               <p className="mt-0.5 whitespace-nowrap tabular-nums text-[24px] font-bold leading-none tracking-[-0.03em] text-info sm:text-[28px]">
                 {summary.published}
               </p>
-            </button>
+            </Link>
             <Link
               href="/stock"
               className="apple-press block px-3 py-2.5 text-left transition hover:bg-surface-elevated sm:px-5 sm:py-3"
